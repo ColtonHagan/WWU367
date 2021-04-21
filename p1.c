@@ -14,9 +14,8 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
-#define PROTOPORT 36711 /* default protocol port number */
+#define PROTOPORT 36711 /* my default port number*/
 #define QLEN 6 /* size of request queue */
-char localhost[] = "140.160.30.109";
 int main(int argc, char * argv[]) {
         static struct option args[] = {
                 {
@@ -58,8 +57,8 @@ int main(int argc, char * argv[]) {
         };
         char type[10] = "";
         char raddr[1000] = "";
-        int lport = 0;
-        int rport = 0;
+        int lport = PROTOPORT;
+        int rport = PROTOPORT;
         int opt = 0;
         while ((opt = getopt_long_only(argc, argv, "", args, NULL)) != -1) {
                 switch (opt) {
@@ -111,11 +110,10 @@ int main(int argc, char * argv[]) {
                 printf("Error: Head role requested -rraddr required\n");
                 exit(EXIT_FAILURE);
         }
-
-        printf("type = %s\n", type);
-        printf("radr = %s\n", raddr);
-        printf("rport = %d\n", rport);
-        printf("lport = %d\n", lport);
+        
+        if(raddr[0] == '\0') {
+            strcpy(raddr, "localhost");
+        }
 
         if ((strcmp(type, "head") == 0)) {
                 struct hostent * ptrh; /* pointer to a host table entry */
@@ -123,19 +121,18 @@ int main(int argc, char * argv[]) {
                 struct sockaddr_in sad; /* structure to hold an IP address */
                 int sd; /* socket descriptor */
                 int port; /* protocol port number */
-                char * host; /* pointer to host name */
+                char* host; /* pointer to host name */
                 int n; /* number of characters read */
-                char buf[1000]; /* buffer for data from the server */
+                char buffer[1000]; /* buffer for data from the server */
                 #ifdef WIN32
                 WSADATA wsaData;
                 WSAStartup(0x0101, & wsaData);
                 #endif
                 memset((char * ) & sad, 0, sizeof(sad)); /* clear sockaddr structure */
                 sad.sin_family = AF_INET; /* set family to Internet */
-                /* Check host argument and assign host name. */
-		port = PROTOPORT;
-		sad.sin_port = htons((u_short)port);
-                host = localhost;
+		        port = rport;
+		        sad.sin_port = htons((u_short)port);
+                host = raddr;
                 /* Convert host name to equivalent IP address and copy to sad. */
                 ptrh = gethostbyname(host);
                 if (((char * ) ptrh) == NULL) {
@@ -159,13 +156,10 @@ int main(int argc, char * argv[]) {
                         fprintf(stderr, "connect failed\n");
                         exit(EXIT_FAILURE);
                 }
-                //sprintf(buf,"Say hi!\n");
-                //send(sd,buf,strlen(buf),0);
-		char buffer[1000];
-    		while((n = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
-        		write(1,buffer,n);
-			send(sd,buffer,strlen(buffer),0);
-    		}
+    		    while((n = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
+        		    write(1,buffer,n);
+			        send(sd,buffer,strlen(buffer),0);
+    		    }
                 /* Close the socket. */
                 closesocket(sd);
                 /* Terminate the client program gracefully. */
@@ -187,9 +181,9 @@ int main(int argc, char * argv[]) {
                 memset((char * ) & sad, 0, sizeof(sad)); /* clear sockaddr structure */
                 sad.sin_family = AF_INET; /* set family to Internet */
                 sad.sin_addr.s_addr = INADDR_ANY; /* set the local IP address */
-                port = PROTOPORT;
-		sad.sin_port = htons((u_short)port);
-		/* Map TCP transport protocol name to protocol number */
+                port = lport;
+		        sad.sin_port = htons((u_short)port);
+		        /* Map TCP transport protocol name to protocol number */
                 if (((long int)(ptrp = getprotobyname("tcp"))) == 0) {
                         fprintf(stderr, "cannot map \"tcp\" to protocol number");
                         exit(EXIT_FAILURE);
@@ -202,10 +196,10 @@ int main(int argc, char * argv[]) {
                 }
                 /*Eliminate "Address already in use" error message.*/
                 int flag = 1;
-                /*if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, & flag, sizeof(int)) == -1) {
+                if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, & flag, sizeof(int)) == -1) {
                         fprintf(stderr, "set sock opt error\n");
                         exit(1);
-                }*/
+                }
                 /* Bind a local address to the socket */
                 if (bind(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
                         fprintf(stderr, "bind failed\n");
@@ -223,11 +217,15 @@ int main(int argc, char * argv[]) {
                                 fprintf(stderr, "accept failed\n");
                                 exit(EXIT_FAILURE);
                         }
-                        /* Prints out data --untested */
                         while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
-            			write(1, buf, n);
-			}
+            			        write(1, buf, n);
+			            }
                         closesocket(sd2);
                 }
+                exit(0);
+        } else if (strcmp(type, "middle") == 0)  {
+                printf("Not yet implemented");
+                exit(0);
         }
 }
+
