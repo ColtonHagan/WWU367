@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
-#define PROTOPORT 36799 /* default port number */
+#define PROTOPORT 36711 /* default port number */
 #define QLEN 6 /* size of request queue */
 int clientSocket(int port, char * host) {
         int sd; /* socket descriptor */
