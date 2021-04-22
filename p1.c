@@ -116,6 +116,7 @@ int main(int argc, char * argv[]) {
         }
 
         if ((strcmp(type, "head") == 0)) {
+                printf("\nHead:\n");
                 struct hostent * ptrh; /* pointer to a host table entry */
                 struct protoent * ptrp; /* pointer to a protocol table entry */
                 struct sockaddr_in sad; /* structure to hold an IP address */
@@ -165,6 +166,7 @@ int main(int argc, char * argv[]) {
                 /* Terminate the client program gracefully. */
                 exit(0);
         } else if ((strcmp(type, "tail") == 0)) {
+                printf("\nTail:\n");
                 struct hostent * ptrh; /* pointer to a host table entry */
                 struct protoent * ptrp; /* pointer to a protocol table entry */
                 struct sockaddr_in sad; /* structure to hold server's address */
@@ -218,58 +220,39 @@ int main(int argc, char * argv[]) {
                                 exit(EXIT_FAILURE);
                         }
                         while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
-            			        write(1, buf, n);
-			            }
+            			write(1, buf, n);
+			}
                         closesocket(sd2);
                 }
-                exit(0);
         } else if (strcmp(type, "middle") == 0)  {
+                printf("\nMiddle:\n");
                 struct hostent * ptrh; /* pointer to a host table entry */
                 struct protoent * ptrp; /* pointer to a protocol table entry */
-                struct sockaddr_in sad, sad2; /* structure to hold server's address */
+                struct sockaddr_in sad; /* structure to hold server's address */
                 struct sockaddr_in cad; /* structure to hold client's address */
-                int sd, sd2, sd3; /* socket descriptors */
+                int sd, sd2; /* socket descriptors */
                 int n;
-                int port, port2; /* protocol port number */
+                int port; /* protocol port number */
                 int alen; /* length of address */
-                char* host;
                 char buf[1000]; /* buffer for string the server sends */
-                char buffer[1000];
                 #ifdef WIN32
                 WSADATA wsaData;
                 WSAStartup(0x0101, & wsaData);
                 #endif
                 memset((char * ) & sad, 0, sizeof(sad)); /* clear sockaddr structure */
-                memset((char * ) & sad2, 0, sizeof(sad2));
-                sad.sin_family = sad2.sin_family = AF_INET; /* set family to Internet */
-                sad.sin_addr.s_addr = sad2.sin_family = INADDR_ANY; /* set the local IP address */
+                sad.sin_family = AF_INET; /* set family to Internet */
+                sad.sin_addr.s_addr = INADDR_ANY; /* set the local IP address */
                 port = lport;
-                port2 = rport;
-		sad.sin_port = htons((u_short)port);
-		sad2.sin_port = htons((u_short)port2);
-		host = raddr;
-                /* Convert host name to equivalent IP address and copy to sad. */
-                ptrh = gethostbyname(host);
-                if (((char * ) ptrh) == NULL) {
-                        fprintf(stderr, "invalid host: %s\n", host);
-                        exit(EXIT_FAILURE);
-                }
-                memcpy(&sad2.sin_addr, ptrh -> h_addr, ptrh -> h_length);
-		/* Map TCP transport protocol name to protocol number */
+		        sad.sin_port = htons((u_short)port);
+		        /* Map TCP transport protocol name to protocol number */
                 if (((long int)(ptrp = getprotobyname("tcp"))) == 0) {
                         fprintf(stderr, "cannot map \"tcp\" to protocol number");
                         exit(EXIT_FAILURE);
                 }
-                /* Create a socket to recieve data */
+                /* Create a socket */
                 sd = socket(PF_INET, SOCK_STREAM, ptrp -> p_proto);
                 if (sd < 0) {
                         fprintf(stderr, "socket creation failed\n");
-                        exit(EXIT_FAILURE);
-                }
-                /* Create a socket to send data */
-                sd3 = socket(PF_INET, SOCK_STREAM, ptrp -> p_proto);
-                if (sd3 < 0) {
-                        fprintf(stderr, "cannot map \"tcp\" to protocol number");
                         exit(EXIT_FAILURE);
                 }
                 /*Eliminate "Address already in use" error message.*/
@@ -288,31 +271,21 @@ int main(int argc, char * argv[]) {
                         fprintf(stderr, "listen failed\n");
                         exit(EXIT_FAILURE);
                 }
-		/* Connects to socket to send data */
-               	if (connect(sd3, (struct sockaddr*) &sad2, sizeof(sad2)) < 0) {
-                      	fprintf(stderr, "connect failed\n");
-                       	exit(EXIT_FAILURE);
-                }
+		printf("Main loop...\n");
                 /* Main server loop - accept and handle requests */
                 while (1) {
+                        printf("\nStart loop\n");
                         alen = sizeof(cad);
-                        /* accepts */
                         if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
                                 fprintf(stderr, "accept failed\n");
                                 exit(EXIT_FAILURE);
                         }
-                        /* Connects to socket to send data */
                         while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
-            			printf("%s", buf);
-            			send(sd3, buf, strlen(buf),0);
+            			    write(1, buf, n);
 			}
                         closesocket(sd2);
-                        closesocket(sd3);
-			printf("looping");
+                        printf("End loop");
                 }
-                printf("EXITING SERVER");
-                closesocket(sd);
-                exit(0);
+                printf("Exiting\n");
         }
 }
-
