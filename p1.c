@@ -220,8 +220,8 @@ int main(int argc, char * argv[]) {
                                 exit(EXIT_FAILURE);
                         }
                         while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
-            			write(1, buf, n);
-			}
+            			        write(1, buf, n);
+			            }
                         closesocket(sd2);
                 }
         } else if (strcmp(type, "middle") == 0)  {
@@ -271,7 +271,7 @@ int main(int argc, char * argv[]) {
                         fprintf(stderr, "listen failed\n");
                         exit(EXIT_FAILURE);
                 }
-		printf("Main loop...\n");
+		printf("Main loop...");
                 /* Main server loop - accept and handle requests */
                 while (1) {
                         printf("\nStart loop\n");
@@ -282,6 +282,7 @@ int main(int argc, char * argv[]) {
                         }
                         while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
             			    write(1, buf, n);
+            			    send(sd2, buf, strlen(buf), 0);
 			}
                         closesocket(sd2);
                         printf("End loop");
@@ -289,3 +290,4 @@ int main(int argc, char * argv[]) {
                 printf("Exiting\n");
         }
 }
+
