@@ -170,7 +170,7 @@ int main(int argc, char * argv[]) {
                 }
                 while ((n = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
                         write(1, buffer, n);
-                        send(sd, buffer, strlen(buffer), 0);
+                        send(sd, buffer, n, 0);
                 }
                 /* Close the socket. */
                 closesocket(sd);
@@ -325,7 +325,7 @@ int main(int argc, char * argv[]) {
                         }
                         while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
                                 write(1, buf, n);
-                                send(sd3, buf, strlen(buf), 0);
+                                send(sd3, buf, n, 0);
                         }
                         closesocket(sd2);
                         printf("End loop");
@@ -333,3 +333,4 @@ int main(int argc, char * argv[]) {
                 printf("Exiting\n");
         }
 }
+
