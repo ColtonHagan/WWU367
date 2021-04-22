@@ -1,6 +1,5 @@
 #ifndef unix
 #define WIN32#include <windows.h>
-
 #include <winsock.h>
 #else
 #define closesocket close
@@ -14,7 +13,7 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
-#define PROTOPORT 36799 /* my default port number */
+#define PROTOPORT 36799 /* default port number */
 #define QLEN 6 /* size of request queue */
 int clientSocket(int port, char * host) {
         int sd; /* socket descriptor */
@@ -44,8 +43,8 @@ int clientSocket(int port, char * host) {
         }
         /* Connect the socket to the specified server. */
         if (connect(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
-                fprintf(stderr, "Error: Failed to make connection to localhost:%d\n",
-                        port);
+                fprintf(stderr, "Error: Failed to make connection to %s:%d\n",
+                        host, port);
                 exit(EXIT_FAILURE);
         }
         return sd;
@@ -84,113 +83,13 @@ int serverSocket(int port) {
         }
         /* Specify size of request queue */
         if (listen(sd, QLEN) < 0) {
-                fprintf(stderr, "Error: listen failed\n");
+                fprintf(stderr, "Error: Listen failed\n");
                 exit(EXIT_FAILURE);
         }
         return sd;
 }
 
-int main(int argc, char * argv[]) {
-        static struct option args[] = {
-                {
-                        "head",
-                        no_argument,
-                        NULL,
-                        0
-                },
-                {
-                        "tail",
-                        no_argument,
-                        NULL,
-                        1
-                },
-                {
-                        "rraddr",
-                        required_argument,
-                        NULL,
-                        2
-                },
-                {
-                        "rrport",
-                        required_argument,
-                        NULL,
-                        3
-                },
-                {
-                        "llport",
-                        required_argument,
-                        NULL,
-                        4
-                },
-                {
-                        NULL,
-                        0,
-                        NULL,
-                        0
-                }
-        };
-        char type[10] = ""; //Type of connection (tail,head,middle)
-        char raddr[1000] = ""; //rraddr -- ip address
-        int lport = PROTOPORT; //llport
-        int rport = PROTOPORT; //rrport
-        int opt = 0; //Arg opt
-
-        //Reads in arguments
-        while ((opt = getopt_long_only(argc, argv, "", args, NULL)) != -1) {
-                switch (opt) {
-                case 0:
-                        if (type[0] != '\0') {
-                                printf("Error: Both -head and -tail roles requested\n");
-                                exit(EXIT_FAILURE);
-                        }
-                        strcpy(type, "head");
-                        break;
-                case 1:
-                        if (type[0] != '\0') {
-                                printf("Error: Both -head and -tail roles requested\n");
-                                exit(EXIT_FAILURE);
-                        }
-                        strcpy(type, "tail");
-                        break;
-                case 2:
-                        strcpy(raddr, optarg);
-                        break;
-                case 3:
-                        rport = atoi(optarg);
-                        if (rport < 1 || rport > 65535) {
-                                printf("Error: rrport address out of range %d\n",rport);
-                                exit(EXIT_FAILURE);
-                        }
-                        break;
-                case 4:
-                        lport = atoi(optarg);
-                        if (lport < 1 || lport > 65535) {
-                                printf("Error: llport address out of range %d\n",lport);
-                                exit(EXIT_FAILURE);
-                        }
-                        break;
-                default:
-                        exit(EXIT_FAILURE);
-                }
-        }
-        if (type[0] == '\0') {
-                strcpy(type, "middle");
-        }
-
-        if (raddr[0] == '\0' && (strcmp(type, "middle") == 0)) {
-                printf("Error: Middle role requested -rraddr required\n");
-                exit(EXIT_FAILURE);
-        }
-
-        if (raddr[0] == '\0' && (strcmp(type, "head") == 0)) {
-                printf("Error: Head role requested -rraddr required\n");
-                exit(EXIT_FAILURE);
-        }
-
-        if (raddr[0] == '\0') {
-                strcpy(raddr, "localhost");
-        }
-
+void createConnection(char type[], char raddr[], int lport, int rport) {
         struct sockaddr_in cad; /* structure to hold client's address */
         int sd, sd2, sd3; /* socket descriptors */
         int n; /* number of characters read */
@@ -218,9 +117,10 @@ int main(int argc, char * argv[]) {
                 while (1) {
                         alen = sizeof(cad);
                         if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
-                                fprintf(stderr, "Error: accept failed\n");
+                                fprintf(stderr, "Error: Accept failed\n");
                                 exit(EXIT_FAILURE);
                         }
+                        //Recieves and writes
                         while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
                                 write(1, buf, n);
                         }
@@ -252,4 +152,77 @@ int main(int argc, char * argv[]) {
                 closesocket(sd3);
                 exit(0);
         }
+}
+
+int main(int argc, char * argv[]) {
+        static struct option args[] = {
+                {"head", no_argument, NULL, 0},
+                {"tail", no_argument, NULL, 1},
+                {"rraddr", required_argument, NULL, 2},
+                {"rrport", required_argument, NULL, 3},
+                {"llport", required_argument, NULL, 4},
+                {NULL , 0, NULL, 0}
+        };
+        char type[10] = ""; //Type of connection (tail,head,middle)
+        char raddr[1000] = ""; //rraddr -- ip address
+        int lport = PROTOPORT; //llport
+        int rport = PROTOPORT; //rrport
+        int opt = 0; //Arg opt
+
+        //Reads in arguments
+        while ((opt = getopt_long_only(argc, argv, "", args, NULL)) != -1) {
+                switch (opt) {
+                case 0:
+                        if (type[0] != '\0') {
+                                printf("Error: Both -head and -tail roles requested\n");
+                                exit(EXIT_FAILURE);
+                        }
+                        strcpy(type, "head");
+                        break;
+                case 1:
+                        if (type[0] != '\0') {
+                                printf("Error: Both -head and -tail roles requested\n");
+                                exit(EXIT_FAILURE);
+                        }
+                        strcpy(type, "tail");
+                        break;
+                case 2:
+                        strcpy(raddr, optarg);
+                        break;
+                case 3:
+                        rport = atoi(optarg);
+                        if (rport < 1 || rport > 65535) {
+                                printf("Error: rrport address out of range %d\n", rport);
+                                exit(EXIT_FAILURE);
+                        }
+                        break;
+                case 4:
+                        lport = atoi(optarg);
+                        if (lport < 1 || lport > 65535) {
+                                printf("Error: llport address out of range %d\n", lport);
+                                exit(EXIT_FAILURE);
+                        }
+                        break;
+                default:
+                        exit(EXIT_FAILURE);
+                }
+        }
+        if (type[0] == '\0') {
+                strcpy(type, "middle");
+        }
+
+        if (raddr[0] == '\0' && (strcmp(type, "middle") == 0)) {
+                printf("Error: Middle role requested -rraddr required\n");
+                exit(EXIT_FAILURE);
+        }
+
+        if (raddr[0] == '\0' && (strcmp(type, "head") == 0)) {
+                printf("Error: Head role requested -rraddr required\n");
+                exit(EXIT_FAILURE);
+        }
+
+        if (raddr[0] == '\0') {
+                strcpy(raddr, "localhost");
+        }
+        createConnection(type, raddr, lport, rport);
 }
