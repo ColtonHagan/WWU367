@@ -224,7 +224,94 @@ int main(int argc, char * argv[]) {
                 }
                 exit(0);
         } else if (strcmp(type, "middle") == 0)  {
-                printf("Not yet implemented");
+                struct hostent * ptrh; /* pointer to a host table entry */
+                struct protoent * ptrp; /* pointer to a protocol table entry */
+                struct sockaddr_in sad, sad2; /* structure to hold server's address */
+                struct sockaddr_in cad; /* structure to hold client's address */
+                int sd, sd2, sd3; /* socket descriptors */
+                int n;
+                int port, port2; /* protocol port number */
+                int alen; /* length of address */
+                char* host;
+                char buf[1000]; /* buffer for string the server sends */
+                char buffer[1000];
+                #ifdef WIN32
+                WSADATA wsaData;
+                WSAStartup(0x0101, & wsaData);
+                #endif
+                memset((char * ) & sad, 0, sizeof(sad)); /* clear sockaddr structure */
+                memset((char * ) & sad2, 0, sizeof(sad2));
+                sad.sin_family = sad2.sin_family = AF_INET; /* set family to Internet */
+                sad.sin_addr.s_addr = sad2.sin_family = INADDR_ANY; /* set the local IP address */
+                port = lport;
+                port2 = rport;
+		sad.sin_port = htons((u_short)port);
+		sad2.sin_port = htons((u_short)port2);
+		host = raddr;
+                /* Convert host name to equivalent IP address and copy to sad. */
+                ptrh = gethostbyname(host);
+                if (((char * ) ptrh) == NULL) {
+                        fprintf(stderr, "invalid host: %s\n", host);
+                        exit(EXIT_FAILURE);
+                }
+                memcpy(&sad2.sin_addr, ptrh -> h_addr, ptrh -> h_length);
+		/* Map TCP transport protocol name to protocol number */
+                if (((long int)(ptrp = getprotobyname("tcp"))) == 0) {
+                        fprintf(stderr, "cannot map \"tcp\" to protocol number");
+                        exit(EXIT_FAILURE);
+                }
+                /* Create a socket to recieve data */
+                sd = socket(PF_INET, SOCK_STREAM, ptrp -> p_proto);
+                if (sd < 0) {
+                        fprintf(stderr, "socket creation failed\n");
+                        exit(EXIT_FAILURE);
+                }
+                /* Create a socket to send data */
+                sd3 = socket(PF_INET, SOCK_STREAM, ptrp -> p_proto);
+                if (sd3 < 0) {
+                        fprintf(stderr, "cannot map \"tcp\" to protocol number");
+                        exit(EXIT_FAILURE);
+                }
+                /*Eliminate "Address already in use" error message.*/
+                int flag = 1;
+                if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, & flag, sizeof(int)) == -1) {
+                        fprintf(stderr, "set sock opt error\n");
+                        exit(1);
+                }
+                /* Bind a local address to the socket */
+                if (bind(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
+                        fprintf(stderr, "bind failed\n");
+                        exit(EXIT_FAILURE);
+                }
+                /* Specify size of request queue */
+                if (listen(sd, QLEN) < 0) {
+                        fprintf(stderr, "listen failed\n");
+                        exit(EXIT_FAILURE);
+                }
+		/* Connects to socket to send data */
+               	if (connect(sd3, (struct sockaddr*) &sad2, sizeof(sad2)) < 0) {
+                      	fprintf(stderr, "connect failed\n");
+                       	exit(EXIT_FAILURE);
+                }
+                /* Main server loop - accept and handle requests */
+                while (1) {
+                        alen = sizeof(cad);
+                        /* accepts */
+                        if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
+                                fprintf(stderr, "accept failed\n");
+                                exit(EXIT_FAILURE);
+                        }
+                        /* Connects to socket to send data */
+                        while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
+            			printf("%s", buf);
+            			send(sd3, buf, strlen(buf),0);
+			}
+                        closesocket(sd2);
+                        closesocket(sd3);
+			printf("looping");
+                }
+                printf("EXITING SERVER");
+                closesocket(sd);
                 exit(0);
         }
 }
