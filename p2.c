@@ -18,6 +18,9 @@
 #include <sys/types.h>        
 #define PROTOPORT 36711 /* default port number */
 #define QLEN 6 /* size of request queue */
+int max(int x, int y) {
+  return (x > y) ? x : y;
+}
 int clientSocket(int port, char * host) {
         int sd; /* socket descriptor */
         struct hostent * ptrh; /* pointer to a host table entry */
@@ -126,6 +129,7 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                     if (retval == -1) {
     	               printf("Error: Select error\n");
     	            } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
+    	               printf ("Sending data...\n");
     	               n = read(STDIN_FILENO, buf, sizeof(buf));
                        write(1, buf, n);
                        send(sd, buf, n, 0);
@@ -148,15 +152,16 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                                 exit(EXIT_FAILURE);
                         }
                         while(1) {
-                        FD_ZERO(&rfds);
-                        FD_SET(STDIN_FILENO, &rfds);
-                        FD_SET(sd2, &rfds);
+                            FD_ZERO(&rfds);
+                            FD_SET(STDIN_FILENO, &rfds);
+                            FD_SET(sd2, &rfds);
                             retval = select (sd2+1, &rfds, NULL, NULL, NULL);
                             if (retval == -1) {
-    	                        printf("Error: Select error\n");
+    	                       printf("Error: Select error\n");
     	                    } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
     	                        n = read(STDIN_FILENO, buf, sizeof(buf));
                                 write(1, buf, n);
+                                send(sd2, buf, n, 0);
     	                    } else if (FD_ISSET(sd2, &rfds)) {
     	                        printf ("Recieving data...\n");
     	                        n = recv(sd2, buf, sizeof(buf), 0);
@@ -179,10 +184,24 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                                 fprintf(stderr, "Error: Accept failed\n");
                                 exit(EXIT_FAILURE);
                         }
-                        //Recieves, writes, and sends
-                        while ((n = recv(sd2, buf, sizeof(buf), 0)) > 0) {
+                        while(1) {
+                            FD_ZERO(&rfds);
+                            FD_SET(sd3, &rfds);
+                            FD_SET(sd2, &rfds);
+                            retval = select(max(sd3,sd2)+1, &rfds, NULL, NULL, NULL);
+                            if (retval == -1) {
+    	                       printf("Error: Select error\n");
+    	                    } else if (FD_ISSET(sd3, &rfds)) {
+    	                        printf ("Recieving data from tail\n");
+    	                        n = recv(sd3, buf, sizeof(buf), 0);
+                                write(1, buf, n);
+                                send(sd2, buf, n, 0);
+    	                    } else if (FD_ISSET(sd2, &rfds)) {
+    	                        printf ("Recieving data from head\n");
+    	                        n = recv(sd2, buf, sizeof(buf), 0);
                                 write(1, buf, n);
                                 send(sd3, buf, n, 0);
+    	                    }
                         }
                         closesocket(sd2);
                 }
