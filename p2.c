@@ -118,12 +118,23 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
         //if head type
         if ((strcmp(type, "head") == 0)) {
                 sd = clientSocket(rport, raddr);
-                //Reads stdin, writes, and sends it
-                while ((n = read(STDIN_FILENO, buf, sizeof(buf))) > 0) {
-                        write(1, buf, n);
-                        send(sd, buf, n, 0);
+                while(1) {
+                    FD_ZERO(&rfds);
+                    FD_SET(STDIN_FILENO, &rfds);
+                    FD_SET(sd, &rfds);
+                    retval = select (sd+1, &rfds, NULL, NULL, NULL);
+                    if (retval == -1) {
+    	               printf("Error: Select error\n");
+    	            } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
+    	               n = read(STDIN_FILENO, buf, sizeof(buf));
+                       write(1, buf, n);
+                       send(sd, buf, n, 0);
+    	            } else if (FD_ISSET(sd, &rfds)) {
+    	               printf ("Recieving data...\n");
+    	               n = recv(sd, buf, sizeof(buf), 0);
+                       write(1, buf, n);
+    	            }
                 }
-                /* Closes and exits */
                 closesocket(sd);
                 exit(0);
                 //if tail type
@@ -144,7 +155,6 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                             if (retval == -1) {
     	                        printf("Error: Select error\n");
     	                    } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
-    	                        printf ("Reading stdin...\n");
     	                        n = read(STDIN_FILENO, buf, sizeof(buf));
                                 write(1, buf, n);
     	                    } else if (FD_ISSET(sd2, &rfds)) {
