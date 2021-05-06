@@ -15,12 +15,74 @@
 #include <string.h>
 #include <curses.h>
 #include <locale.h>
-#include <sys/types.h>        
+#include <sys/types.h>  
+#include <ctype.h>
+#include <string.h>
 #define PROTOPORT 36711 /* default port number */
 #define QLEN 6 /* size of request queue */
+
+//for commands/arguments
+char outputDir[10];
+char displayDir[10];
+
+//For reading input
+int cmdLen;
+char cmd[100];
+char prevCh;
+bool insertMode = false;
+void readInput(char currentCh, int leftSd, int rightSd) {
+        //shows space
+        if(currentCh == 10) {
+            printf("\r\n");
+        } 
+        //ignores
+        if(currentCh == '\\' && prevCh != '\\')  {
+        //exits insert mode
+        } else if(insertMode) {
+            if(currentCh == 27 && prevCh != '\\') {
+                prevCh = '\0';
+                insertMode = false;
+                printf("\r\nEntering command mode:\r\n");
+            //sends data
+            } else {
+                if(strcmp(outputDir, "left") == 0) {
+                    send(leftSd, &currentCh, 1, 0);
+                } else {
+                    send(rightSd, &currentCh, 1, 0);
+                }
+            }
+        // command mode
+        } else {
+            //enters insert mode
+            if(currentCh == 'i' && prevCh != '\\') {
+                prevCh = '\0';
+                insertMode = true;
+                printf("\r\nEntering insert mode:\r\n");
+            // quits
+            } else if (currentCh == 'q' && prevCh != '\\') {
+                nocbreak();
+                endwin();
+                exit(0);
+            //proccess word/command
+            } else if (isspace(currentCh) && !isspace(prevCh)) {
+                cmd[cmdLen] = '\0';
+                printf("\r\ncmd = %s\r\n", cmd);
+                //proccess cmds 
+                cmd[0] = '\0';
+                cmdLen = 0;
+            //adds char to current comman
+            } else {
+                cmd[cmdLen] = currentCh;
+                cmdLen++;
+            }
+        }
+        prevCh = currentCh;
+}
+
 int max(int x, int y) {
   return (x > y) ? x : y;
 }
+
 int clientSocket(int port, char * host) {
         int sd; /* socket descriptor */
         struct hostent * ptrh; /* pointer to a host table entry */
@@ -101,18 +163,8 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
         int n; /* number of characters read */
         int alen; /* length of address */
         char buf[1000]; /* buffer for string the server sends */
-        // new
-        /*int ci;
-        setlocale (LC_ALL, "");
-        initscr ();
-        cbreak ();
-        noecho ();
-        intrflush (stdscr, FALSE);   
-        keypad (stdscr, TRUE);                               
-        clear ();*/
         fd_set rfds;
         int retval; 
-        //setbuf(stdout, NULL);
         #ifdef WIN32
         WSADATA wsaData;
         WSAStartup(0x0101, & wsaData);
@@ -129,12 +181,12 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                     if (retval == -1) {
     	               printf("Error: Select error\n");
     	            } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
-    	               printf ("Sending data...\n");
+    	               //printf ("Sending data...\n");
     	               n = read(STDIN_FILENO, buf, sizeof(buf));
                        write(1, buf, n);
                        send(sd, buf, n, 0);
     	            } else if (FD_ISSET(sd, &rfds)) {
-    	               printf ("Recieving data...\n");
+    	               //printf ("Recieving data...\n");
     	               n = recv(sd, buf, sizeof(buf), 0);
                        write(1, buf, n);
     	            }
@@ -143,6 +195,14 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                 exit(0);
                 //if tail type
         } else if ((strcmp(type, "tail") == 0)) {
+                        setlocale(LC_ALL,"");  
+                        initscr();  
+                        cbreak();
+                        //nonl();
+                        intrflush(stdscr, FALSE);   
+                        keypad(stdscr, TRUE); 
+                        clear();
+        
                 sd = serverSocket(lport);
                 /* accepts and handles requests */
                 while (1) {
@@ -159,11 +219,12 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                             if (retval == -1) {
     	                       printf("Error: Select error\n");
     	                    } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
-    	                        n = read(STDIN_FILENO, buf, sizeof(buf));
-                                write(1, buf, n);
-                                send(sd2, buf, n, 0);
+    	                        //n = read(STDIN_FILENO, buf, sizeof(buf));
+                                //write(1, buf, n);
+                                //send(sd2, buf, n, 0);
+                                readInput(getch(), sd2, 0);
     	                    } else if (FD_ISSET(sd2, &rfds)) {
-    	                        printf ("Recieving data...\n");
+    	                        //printf ("Recieving data...\n");
     	                        n = recv(sd2, buf, sizeof(buf), 0);
                                 write(1, buf, n);
     	                    }
@@ -192,12 +253,12 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                             if (retval == -1) {
     	                       printf("Error: Select error\n");
     	                    } else if (FD_ISSET(sd3, &rfds)) {
-    	                        printf ("Recieving data from tail\n");
+    	                        //printf ("Recieving data from tail\n");
     	                        n = recv(sd3, buf, sizeof(buf), 0);
                                 write(1, buf, n);
                                 send(sd2, buf, n, 0);
     	                    } else if (FD_ISSET(sd2, &rfds)) {
-    	                        printf ("Recieving data from head\n");
+    	                        //printf ("Recieving data from head\n");
     	                        n = recv(sd2, buf, sizeof(buf), 0);
                                 write(1, buf, n);
                                 send(sd3, buf, n, 0);
@@ -236,6 +297,7 @@ int main(int argc, char * argv[]) {
                                 exit(EXIT_FAILURE);
                         }
                         strcpy(type, "head");
+                        strcpy(outputDir, "right");
                         break;
                 case 1:
                         if (type[0] != '\0') {
@@ -243,6 +305,7 @@ int main(int argc, char * argv[]) {
                                 exit(EXIT_FAILURE);
                         }
                         strcpy(type, "tail");
+                        strcpy(outputDir, "left");
                         break;
                 case 2:
                         strcpy(raddr, optarg);
@@ -267,6 +330,7 @@ int main(int argc, char * argv[]) {
         }
         if (type[0] == '\0') {
                 strcpy(type, "middle");
+                strcpy(outputDir, "right");
         }
 
         if (raddr[0] == '\0' && (strcmp(type, "middle") == 0)) {
@@ -284,4 +348,6 @@ int main(int argc, char * argv[]) {
         }
         createConnection(type, raddr, lport, rport);
 }
+
+
 
