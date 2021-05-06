@@ -22,6 +22,7 @@
 #define QLEN 6 /* size of request queue */
 
 //for commands/arguments
+char type[10] = ""; //Type of connection (tail,head,middle)
 char outputDir[10];
 char displayDir[10];
 char src[100];
@@ -42,10 +43,39 @@ char* getOptCmd(char* cmd, char* baseCmd) {
     }
     return NULL;
 }
+void proccessCmd(char cmd[]) {
+    //quit
+    if((cmd[0] == 'q') && (strlen(cmd) == 1)) {
+        nocbreak();
+        endwin();
+        exit(0);
+    //src
+    } else if(strstr(cmd,"src")) {
+        printf("Opt cmd = %s\r\n",getOptCmd(cmd, "src"));
+    //output cmds
+    } else if(strcmp(cmd,"outl") == 0) {
+        if(strcmp(type, "tail") == 0|| strcmp(type, "middle")== 0)
+            strcpy(outputDir, "left");
+        else 
+            printf("Error: Can't change output direction to left, connection is head\r\n");
+    } else if(strcmp(cmd,"outr" )== 0) {
+        if(strcmp(type, "head") == 0|| strcmp(type, "middle") == 0) {
+            strcpy(outputDir, "right");
+        } else {
+            printf("Error: Can't change output direction to right, connection is tail\r\n");
+        }
+    } else if(strcmp(cmd,"out") == 0) {
+        printf("Output direction is %s\r\n", outputDir);
+    //Error
+    } else {
+        printf("Error: Command not recognised\r\n");
+    }
+    refresh();
+}
 
 void readInput(char currentCh, int leftSd, int rightSd) {
         bool modeChange = false;
-        //show space
+        //show space correctly
         if(currentCh == 10) {
             printf("\r\n");
         } 
@@ -60,25 +90,30 @@ void readInput(char currentCh, int leftSd, int rightSd) {
                 cmdLen--;
             }
         }
+        
         //prints slash without any meta
         if(currentCh == '\\' && prevCh != '\\') {
             addch(currentCh);
+            refresh();
         //ignores
-        } else if (currentCh == 7 || currentCh == 127 || currentCh == 263)  {
+        } else if (currentCh == 7 || currentCh == 127 || currentCh > 255)  {
         //exits insert mode
         } else if(insertMode) {
-            addch(currentCh);
             if(currentCh == 27 && prevCh != '\\') {
                 modeChange = true;
                 insertMode = false;
+                cmd[0] = '\0';
+                cmdLen = 0;
                 printf("\r\nEntering command mode:\r\n");
             //sends data
             } else {
+                addch(currentCh);
                 if(strcmp(outputDir, "left") == 0) {
                     send(leftSd, &currentCh, 1, 0);
                 } else {
                     send(rightSd, &currentCh, 1, 0);
                 }
+                refresh();
             }
         // command mode
         } else {
@@ -88,18 +123,15 @@ void readInput(char currentCh, int leftSd, int rightSd) {
                 insertMode = true;
                 printf("\r\nEntering insert mode:\r\n");
             // quits
-            } else if (currentCh == 'q' && prevCh != '\\') {
+            /*} else if (currentCh == 'q' && prevCh != '\\') {
                 nocbreak();
                 endwin();
-                exit(0);
+                exit(0);*/
             //proccess word/command on enter
             } else if (currentCh == 10) {
                 cmd[cmdLen] = '\0';
-                printf("cmd = %s\r\n", cmd);
-                //proccess cmds 
-                if(strstr(cmd,"src")) {
-                    printf("\rOpt cmd = %s\r\n",getOptCmd(cmd, "src"));
-                }
+                printf("cmd = %s of length %d\r\n", cmd, cmdLen);
+                proccessCmd(cmd);
                 cmd[0] = '\0';
                 cmdLen = 0;
             //adds char to current comman
@@ -107,14 +139,18 @@ void readInput(char currentCh, int leftSd, int rightSd) {
                 addch(currentCh);
                 cmd[cmdLen] = currentCh;
                 cmdLen++;
+                refresh();
             }
         }
+        //update prevCH
         if(!modeChange)
             prevCh = currentCh;
         else
             prevCh = '\0';
+        refresh();
 }
 
+//Finds max of 2 given values and returns
 int max(int x, int y) {
   return (x > y) ? x : y;
 }
@@ -193,7 +229,7 @@ int serverSocket(int port) {
         return sd;
 }
 
-void createConnection(char type[], char raddr[], int lport, int rport) {
+void createConnection(char raddr[], int lport, int rport) {
         struct sockaddr_in cad; /* structure to hold client's address */
         int sd, sd2, sd3; /* socket descriptors */
         int n; /* number of characters read */
@@ -333,12 +369,10 @@ int main(int argc, char * argv[]) {
                 {"dsprl", no_argument, NULL, 9},
                 {NULL , 0, NULL, 0}
         };
-        char type[10] = ""; //Type of connection (tail,head,middle)
         char raddr[1000] = ""; //rraddr -- ip address
         int lport = PROTOPORT; //llport
         int rport = PROTOPORT; //rrport
         int opt = 0; //Arg opt
-        strcpy(src, "scriptin");
 
         //Reads in arguments
         while ((opt = getopt_long_only(argc, argv, "", args, NULL)) != -1) {
@@ -379,6 +413,8 @@ int main(int argc, char * argv[]) {
                 case 5:
                     if(optarg)
                         strcpy(src, optarg); //This only works with = -- is this fixable?
+                    else 
+                        strcpy(src, "scriptin");
                     printf("src with %s\n", src);
                     break;
                 case 6:
@@ -417,8 +453,9 @@ int main(int argc, char * argv[]) {
         if (raddr[0] == '\0') {
                 strcpy(raddr, "localhost");
         }
-        createConnection(type, raddr, lport, rport);
+        createConnection(raddr, lport, rport);
 }
+
 
 
 
