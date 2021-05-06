@@ -23,16 +23,19 @@
 
 //for commands/arguments
 char type[10] = ""; //Type of connection (tail,head,middle)
-char outputDir[10];
-char displayDir[10];
-char src[100];
+char outputDir[10]; //Direction of output
+char displayDir[10]; //Direction of display
+char src[100]; //SRC file
+bool lpl = false; //looper left
+bool lpr = false; //looper right
 
 //For reading input
-int cmdLen;
-char cmd[100];
-char prevCh;
-bool insertMode = false;
+int cmdLen; //length of commad
+char cmd[100]; //command
+char prevCh; //prevous char
+bool insertMode = false; //if in insert mode
 
+//Gets optional command from given cmd
 char* getOptCmd(char* cmd, char* baseCmd) {
     char* optCmd = strtok(cmd, " =");
     while(optCmd != NULL) {
@@ -43,6 +46,7 @@ char* getOptCmd(char* cmd, char* baseCmd) {
     }
     return NULL;
 }
+//uses given comman
 void proccessCmd(char cmd[]) {
     //quit
     if((cmd[0] == 'q') && (strlen(cmd) == 1)) {
@@ -50,8 +54,14 @@ void proccessCmd(char cmd[]) {
         endwin();
         exit(0);
     //src
+    } else if(strcmp(cmd,"src") == 0) {
+        printf("src no opt cmds\r\n"); // temp
     } else if(strstr(cmd,"src")) {
-        printf("Opt cmd = %s\r\n",getOptCmd(cmd, "src"));
+        char* optCdm = getOptCmd(cmd, "src");
+        //incase you have src with extra spaces/enters
+        if(optCdm != NULL) {
+            printf("Opt cmd = %s\r\n",optCdm); //temp
+        }
     //output cmds
     } else if(strcmp(cmd,"outl") == 0) {
         if(strcmp(type, "tail") == 0|| strcmp(type, "middle")== 0)
@@ -66,7 +76,30 @@ void proccessCmd(char cmd[]) {
         }
     } else if(strcmp(cmd,"out") == 0) {
         printf("Output direction is %s\r\n", outputDir);
-    //Error
+    //display cmds
+    } else if(strcmp(cmd,"dsplr") == 0) {
+        if(strcmp(type, "head") == 0 || strcmp(type, "middle")== 0)
+            strcpy(displayDir, "lr");
+        else 
+            printf("Error: Can't display right, connection is tail\r\n");
+    } else if(strcmp(cmd,"dsprl") == 0) {
+        if(strcmp(type, "tail") == 0 || strcmp(type, "middle") == 0) {
+            strcpy(displayDir, "rl");
+        } else {
+            printf("Error: Can't display left, connection is head\r\n");
+        }
+    } else if(strcmp(cmd,"dsp") == 0) {
+        printf("Write display= %s\r\n", displayDir);
+    //loop cmds
+    } else if (strcmp(cmd,"lpl") == 0) {
+        lpl = true;
+    } else if (strcmp(cmd,"lpl0") == 0) {
+        lpl = false;
+    } else if (strcmp(cmd,"lpr") == 0) {
+        lpr = true;
+    } else if (strcmp(cmd,"lpr0") == 0) {
+        lpr = false;
+    //No current command
     } else {
         printf("Error: Command not recognised\r\n");
     }
@@ -75,9 +108,9 @@ void proccessCmd(char cmd[]) {
 
 void readInput(char currentCh, int leftSd, int rightSd) {
         bool modeChange = false;
-        //show space correctly
+        //moves to new line with enter
         if(currentCh == 10) {
-            printf("\r\n");
+            printf("\r");
         } 
         //backspace
         if (currentCh == 7 || currentCh == 127 || currentCh == 263) {
@@ -89,13 +122,13 @@ void readInput(char currentCh, int leftSd, int rightSd) {
                 cmd[cmdLen] = '\0';
                 cmdLen--;
             }
+            refresh();
         }
-        
         //prints slash without any meta
         if(currentCh == '\\' && prevCh != '\\') {
             addch(currentCh);
             refresh();
-        //ignores
+        //ignores backspace
         } else if (currentCh == 7 || currentCh == 127 || currentCh > 255)  {
         //exits insert mode
         } else if(insertMode) {
@@ -122,13 +155,12 @@ void readInput(char currentCh, int leftSd, int rightSd) {
                 modeChange = true;
                 insertMode = true;
                 printf("\r\nEntering insert mode:\r\n");
-            // quits
-            /*} else if (currentCh == 'q' && prevCh != '\\') {
-                nocbreak();
-                endwin();
-                exit(0);*/
             //proccess word/command on enter
             } else if (currentCh == 10) {
+                //prints enter
+                addch(currentCh);
+                refresh();
+                //proccess cmd
                 cmd[cmdLen] = '\0';
                 printf("cmd = %s of length %d\r\n", cmd, cmdLen);
                 proccessCmd(cmd);
@@ -147,6 +179,7 @@ void readInput(char currentCh, int leftSd, int rightSd) {
             prevCh = currentCh;
         else
             prevCh = '\0';
+        //extra refresh to deal with outliers
         refresh();
 }
 
@@ -270,6 +303,9 @@ void createConnection(char raddr[], int lport, int rport) {
                        } else {
                            write(1, buf, n);
                        }
+                       if(lpl) {
+                            send(sd, buf, n, 0);
+                       }
     	            }
                 }
                 closesocket(sd);
@@ -299,6 +335,9 @@ void createConnection(char raddr[], int lport, int rport) {
                                     printf("\r\n");
                                 } else {
                                     write(1, buf, n);
+                                }
+                                if(lpr) {
+                                    send(sd2, buf, n, 0);
                                 }
     	                    }
                         }
@@ -330,20 +369,31 @@ void createConnection(char raddr[], int lport, int rport) {
                                 readInput(getch(), sd2, sd3);
     	                    } else if (FD_ISSET(sd3, &rfds)) {
     	                        n = recv(sd3, buf, sizeof(buf), 0);
-                                if(buf[0] == 10) {
-                                    printf("\r\n");
-                                } else {
-                                    write(1, buf, n);
-                                }
-                                send(sd2, buf, n, 0);
+    	                        //prints if rl to left
+    	                        if(strcmp(displayDir, "rl") == 0) {
+                                    if(buf[0] == 10) {
+                                        printf("\r\n");
+                                    } else {
+                                        write(1, buf, n);
+                                    }
+    	                        }
+    	                        if(lpl)
+    	                            send(sd3, buf, n, 0);
+    	                        else
+                                    send(sd2, buf, n, 0);
     	                    } else if (FD_ISSET(sd2, &rfds)) {
     	                        n = recv(sd2, buf, sizeof(buf), 0);
-                                if(buf[0] == 10) {
-                                    printf("\r\n");
-                                } else {
-                                    write(1, buf, n);
-                                }
-                                send(sd3, buf, n, 0);
+    	                        if(strcmp(displayDir, "lr") == 0) {
+                                    if(buf[0] == 10) {
+                                        printf("\r\n");
+                                    } else {
+                                        write(1, buf, n);
+                                    }
+    	                        }
+    	                        if(lpr)
+    	                            send(sd2, buf, n, 0);
+    	                        else
+                                    send(sd3, buf, n, 0);
     	                    }
                         }
                         closesocket(sd2);
@@ -367,9 +417,12 @@ int main(int argc, char * argv[]) {
                 {"prsr", no_argument, NULL, 7},
                 {"dsplr", no_argument, NULL, 8},
                 {"dsprl", no_argument, NULL, 9},
+                {"lpr", no_argument, NULL, 10},
+                {"lpl", no_argument, NULL, 11},
                 {NULL , 0, NULL, 0}
         };
         char raddr[1000] = ""; //rraddr -- ip address
+        char tempDisDir[5] = "";
         int lport = PROTOPORT; //llport
         int rport = PROTOPORT; //rrport
         int opt = 0; //Arg opt
@@ -384,6 +437,7 @@ int main(int argc, char * argv[]) {
                         }
                         strcpy(type, "head");
                         strcpy(outputDir, "right");
+                        strcpy(displayDir, "lr");
                         break;
                 case 1:
                         if (type[0] != '\0') {
@@ -392,6 +446,7 @@ int main(int argc, char * argv[]) {
                         }
                         strcpy(type, "tail");
                         strcpy(outputDir, "left");
+                        strcpy(displayDir, "rl");
                         break;
                 case 2:
                         strcpy(raddr, optarg);
@@ -415,21 +470,37 @@ int main(int argc, char * argv[]) {
                         strcpy(src, optarg); //This only works with = -- is this fixable?
                     else 
                         strcpy(src, "scriptin");
-                    printf("src with %s\n", src);
+                    printf("src with %s\n", src); //temp
                     break;
                 case 6:
-                    printf("left side persistant\n");
+                    printf("left side persistant\n"); //temp
                     break;
                 case 7:
-                    printf("right side persistant\n");
+                    printf("right side persistant\n"); //temp
                     break;
                 case 8:
-                    strcpy(displayDir, "right");
-                    printf("%s side display\n", displayDir);
+                    if(tempDisDir[0] != '\0') {
+                        strcpy(tempDisDir, "lr");
+                    } else {
+                        printf("Error: Both -dsplf and -dsplr roles requested\n");
+                        exit(0);
+                    } 
                     break;
                 case 9:
-                    strcpy(displayDir, "left");
-                    printf("%s side display\n", displayDir);
+                    if (tempDisDir[0] != '\0') {
+                        strcpy(tempDisDir, "rl");
+                    } else {
+                        printf("Error: Both -dsplf and -dsplr roles requested\n");
+                        exit(0);
+                    }
+                    break;
+                case 10:
+                    printf("looper right\n"); // temp
+                    lpr = true;
+                    break;
+                case 11:
+                    printf("looper left\n"); // temp
+                    lpl = true;
                     break;
                 default:
                         exit(EXIT_FAILURE);
@@ -438,6 +509,10 @@ int main(int argc, char * argv[]) {
         if (type[0] == '\0') {
                 strcpy(type, "middle");
                 strcpy(outputDir, "right");
+                if(tempDisDir[0] != '\0')
+                    strcpy(displayDir, tempDisDir);
+                else
+                    strcpy(displayDir, "lr");
         }
 
         if (raddr[0] == '\0' && (strcmp(type, "middle") == 0)) {
@@ -455,8 +530,4 @@ int main(int argc, char * argv[]) {
         }
         createConnection(raddr, lport, rport);
 }
-
-
-
-
 
