@@ -24,23 +24,52 @@
 //for commands/arguments
 char outputDir[10];
 char displayDir[10];
+char src[100];
 
 //For reading input
 int cmdLen;
 char cmd[100];
 char prevCh;
 bool insertMode = false;
+
+char* getOptCmd(char* cmd, char* baseCmd) {
+    char* optCmd = strtok(cmd, " =");
+    while(optCmd != NULL) {
+        if(strcmp(optCmd,baseCmd) != 0) {
+            return optCmd;
+        }
+        optCmd = strtok(NULL, " =");
+    }
+    return NULL;
+}
+
 void readInput(char currentCh, int leftSd, int rightSd) {
-        //shows space
+        bool modeChange = false;
+        //show space
         if(currentCh == 10) {
             printf("\r\n");
         } 
+        //backspace
+        if (currentCh == 7 || currentCh == 127 || currentCh == 263) {
+            int x,y;
+            getyx(stdscr,y,x);
+            if(!(x == 0)) {
+                move(y,x-1);
+                delch();
+                cmd[cmdLen] = '\0';
+                cmdLen--;
+            }
+        }
+        //prints slash without any meta
+        if(currentCh == '\\' && prevCh != '\\') {
+            addch(currentCh);
         //ignores
-        if(currentCh == '\\' && prevCh != '\\')  {
+        } else if (currentCh == 7 || currentCh == 127 || currentCh == 263)  {
         //exits insert mode
         } else if(insertMode) {
+            addch(currentCh);
             if(currentCh == 27 && prevCh != '\\') {
-                prevCh = '\0';
+                modeChange = true;
                 insertMode = false;
                 printf("\r\nEntering command mode:\r\n");
             //sends data
@@ -55,7 +84,7 @@ void readInput(char currentCh, int leftSd, int rightSd) {
         } else {
             //enters insert mode
             if(currentCh == 'i' && prevCh != '\\') {
-                prevCh = '\0';
+                modeChange = true;
                 insertMode = true;
                 printf("\r\nEntering insert mode:\r\n");
             // quits
@@ -63,20 +92,27 @@ void readInput(char currentCh, int leftSd, int rightSd) {
                 nocbreak();
                 endwin();
                 exit(0);
-            //proccess word/command
-            } else if (isspace(currentCh) && !isspace(prevCh)) {
+            //proccess word/command on enter
+            } else if (currentCh == 10) {
                 cmd[cmdLen] = '\0';
-                printf("\r\ncmd = %s\r\n", cmd);
+                printf("cmd = %s\r\n", cmd);
                 //proccess cmds 
+                if(strstr(cmd,"src")) {
+                    printf("\rOpt cmd = %s\r\n",getOptCmd(cmd, "src"));
+                }
                 cmd[0] = '\0';
                 cmdLen = 0;
             //adds char to current comman
             } else {
+                addch(currentCh);
                 cmd[cmdLen] = currentCh;
                 cmdLen++;
             }
         }
-        prevCh = currentCh;
+        if(!modeChange)
+            prevCh = currentCh;
+        else
+            prevCh = '\0';
 }
 
 int max(int x, int y) {
@@ -170,6 +206,15 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
         WSAStartup(0x0101, & wsaData);
         #endif
         
+        setlocale(LC_ALL,"");  
+        initscr();  
+        cbreak();
+        nl();
+        noecho();
+        intrflush(stdscr, FALSE);   
+        keypad(stdscr, TRUE); 
+        clear();
+        
         //if head type
         if ((strcmp(type, "head") == 0)) {
                 sd = clientSocket(rport, raddr);
@@ -181,28 +226,20 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                     if (retval == -1) {
     	               printf("Error: Select error\n");
     	            } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
-    	               //printf ("Sending data...\n");
-    	               n = read(STDIN_FILENO, buf, sizeof(buf));
-                       write(1, buf, n);
-                       send(sd, buf, n, 0);
+    	               readInput(getch(), 0, sd);
     	            } else if (FD_ISSET(sd, &rfds)) {
-    	               //printf ("Recieving data...\n");
     	               n = recv(sd, buf, sizeof(buf), 0);
-                       write(1, buf, n);
+                       if(buf[0] == 10) {
+                           printf("\r\n");
+                       } else {
+                           write(1, buf, n);
+                       }
     	            }
                 }
                 closesocket(sd);
                 exit(0);
                 //if tail type
         } else if ((strcmp(type, "tail") == 0)) {
-                        setlocale(LC_ALL,"");  
-                        initscr();  
-                        cbreak();
-                        //nonl();
-                        intrflush(stdscr, FALSE);   
-                        keypad(stdscr, TRUE); 
-                        clear();
-        
                 sd = serverSocket(lport);
                 /* accepts and handles requests */
                 while (1) {
@@ -219,14 +256,14 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                             if (retval == -1) {
     	                       printf("Error: Select error\n");
     	                    } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
-    	                        //n = read(STDIN_FILENO, buf, sizeof(buf));
-                                //write(1, buf, n);
-                                //send(sd2, buf, n, 0);
                                 readInput(getch(), sd2, 0);
     	                    } else if (FD_ISSET(sd2, &rfds)) {
-    	                        //printf ("Recieving data...\n");
     	                        n = recv(sd2, buf, sizeof(buf), 0);
-                                write(1, buf, n);
+                                if(buf[0] == 10) {
+                                    printf("\r\n");
+                                } else {
+                                    write(1, buf, n);
+                                }
     	                    }
                         }
 	                    closesocket(sd2);
@@ -249,18 +286,27 @@ void createConnection(char type[], char raddr[], int lport, int rport) {
                             FD_ZERO(&rfds);
                             FD_SET(sd3, &rfds);
                             FD_SET(sd2, &rfds);
+                            FD_SET(STDIN_FILENO, &rfds);
                             retval = select(max(sd3,sd2)+1, &rfds, NULL, NULL, NULL);
                             if (retval == -1) {
     	                       printf("Error: Select error\n");
+                            } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
+                                readInput(getch(), sd2, sd3);
     	                    } else if (FD_ISSET(sd3, &rfds)) {
-    	                        //printf ("Recieving data from tail\n");
     	                        n = recv(sd3, buf, sizeof(buf), 0);
-                                write(1, buf, n);
+                                if(buf[0] == 10) {
+                                    printf("\r\n");
+                                } else {
+                                    write(1, buf, n);
+                                }
                                 send(sd2, buf, n, 0);
     	                    } else if (FD_ISSET(sd2, &rfds)) {
-    	                        //printf ("Recieving data from head\n");
     	                        n = recv(sd2, buf, sizeof(buf), 0);
-                                write(1, buf, n);
+                                if(buf[0] == 10) {
+                                    printf("\r\n");
+                                } else {
+                                    write(1, buf, n);
+                                }
                                 send(sd3, buf, n, 0);
     	                    }
                         }
@@ -280,6 +326,11 @@ int main(int argc, char * argv[]) {
                 {"rraddr", required_argument, NULL, 2},
                 {"rrport", required_argument, NULL, 3},
                 {"llport", required_argument, NULL, 4},
+                {"src", optional_argument, NULL, 5},
+                {"prsl", no_argument, NULL, 6},
+                {"prsr", no_argument, NULL, 7},
+                {"dsplr", no_argument, NULL, 8},
+                {"dsprl", no_argument, NULL, 9},
                 {NULL , 0, NULL, 0}
         };
         char type[10] = ""; //Type of connection (tail,head,middle)
@@ -287,6 +338,7 @@ int main(int argc, char * argv[]) {
         int lport = PROTOPORT; //llport
         int rport = PROTOPORT; //rrport
         int opt = 0; //Arg opt
+        strcpy(src, "scriptin");
 
         //Reads in arguments
         while ((opt = getopt_long_only(argc, argv, "", args, NULL)) != -1) {
@@ -324,6 +376,25 @@ int main(int argc, char * argv[]) {
                                 exit(EXIT_FAILURE);
                         }
                         break;
+                case 5:
+                    if(optarg)
+                        strcpy(src, optarg); //This only works with = -- is this fixable?
+                    printf("src with %s\n", src);
+                    break;
+                case 6:
+                    printf("left side persistant\n");
+                    break;
+                case 7:
+                    printf("right side persistant\n");
+                    break;
+                case 8:
+                    strcpy(displayDir, "right");
+                    printf("%s side display\n", displayDir);
+                    break;
+                case 9:
+                    strcpy(displayDir, "left");
+                    printf("%s side display\n", displayDir);
+                    break;
                 default:
                         exit(EXIT_FAILURE);
                 }
@@ -348,6 +419,7 @@ int main(int argc, char * argv[]) {
         }
         createConnection(type, raddr, lport, rport);
 }
+
 
 
 
