@@ -1,3 +1,10 @@
+/*
+Name : Colton Hagan
+Date : 5/7/21
+Class : CS367
+Program : Piggy2 program, networking program matching assignment description 
+*/
+
 #ifndef unix
 #define WIN32#include <windows.h>
 #include <winsock.h>
@@ -47,6 +54,7 @@ char cmd[100]; //command
 char prevCh; //prevous char
 bool insertMode = false; //if in insert mode
 
+// Makes and returns socket for client (which sends information) from given port and host
 int clientSocket(int port, char * host) {
         int sd; /* socket descriptor */
         struct hostent * ptrh; /* pointer to a host table entry */
@@ -90,6 +98,7 @@ int clientSocket(int port, char * host) {
         return sd;
 }
 
+// Makes and returns socket for server (which recieves information) from given port
 int serverSocket(int port) {
         int sd; /* socket descriptor */
         struct hostent * ptrh; /* pointer to a host table entry */
@@ -146,7 +155,7 @@ char* getOptCmd(char* cmd, char* baseCmd) {
     }
     return NULL;
 }
-//uses given comman
+//uses given command
 void proccessCmd(char cmd[]) {
     //quit
     if((cmd[0] == 'q') && (strlen(cmd) == 1)) {
@@ -248,6 +257,7 @@ void proccessCmd(char cmd[]) {
     refresh();
 }
 
+//reads input via insert/cmd adding given char to either
 void readInput(char currentCh) {
         bool modeChange = false;
         //moves to new start line with enter
@@ -329,7 +339,7 @@ void readInput(char currentCh) {
 int max(int x, int y) {
   return (x > y) ? x : y;
 }
-
+// Creates "head", "tail", or "middle" connection based on given type, attaches to given port and address if needed/asked to
 void createConnection() {
         int sd, sd2, sd3; /* socket descriptors */
         int n; /* number of characters read */
@@ -677,5 +687,3 @@ int main(int argc, char * argv[]) {
         }
         createConnection();
 }
-
-
