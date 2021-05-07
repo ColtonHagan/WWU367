@@ -351,7 +351,6 @@ void createConnection() {
         intrflush(stdscr, FALSE);   
         keypad(stdscr, TRUE); 
         clear();
-        printf("\r"); // <------- temp test
         
         //gets local ip address
         char hostBuf[100];
@@ -492,7 +491,6 @@ void createConnection() {
                                 }
                             } else if (rightSd > -1 && FD_ISSET(sd3, &loopRfds)) {
     	                        if((n = recv(rightSd, buf, sizeof(buf), 0)) == 0) {
-    	                            printf("\r\nRight side disconected\r\n"); //<-------- Temp
     	                            closesocket(rightSd);
 				                    FD_CLR(rightSd, &rfds);
 				                    rightSd = -1;
@@ -520,7 +518,6 @@ void createConnection() {
     	                        }
     	                    } else if (leftSd > -1 && FD_ISSET(sd2, &loopRfds)) {
     	                        if((n = recv(leftSd, buf, sizeof(buf), 0)) == 0) {
-    	                            printf("\r\nLeft side disconected\r\n"); //<-------- Temp
     	                            closesocket(sd);
 				                    FD_CLR(sd, &rfds);
 				                    leftSd = -1;
@@ -624,11 +621,9 @@ int main(int argc, char * argv[]) {
                     printf("src with %s\n", src); //temp
                     break;
                 case 6:
-                    printf("left side persistant\n"); //temp
                     prsl = true;
                     break;
                 case 7:
-                    printf("right side persistant\n"); //temp
                     prsr = true;
                     break;
                 case 8:
@@ -648,11 +643,9 @@ int main(int argc, char * argv[]) {
                     }
                     break;
                 case 10:
-                    printf("looper right\n"); // temp
                     lpr = true;
                     break;
                 case 11:
-                    printf("looper left\n"); // temp
                     lpl = true;
                     break;
                 default:
