@@ -114,6 +114,7 @@ void proccessCmd(char cmd[]) {
 		    FD_CLR(rightSd,&rfds);
 		    rightSd = -1;
 		    strcpy(rightStatus, "DISCONNECTED");
+		    // <---------------- code to reconect here 
         } else {
             printf("Error: Right connection doesn't exist\r\n");
         }
@@ -123,6 +124,7 @@ void proccessCmd(char cmd[]) {
             FD_CLR(leftSd,&rfds);
 		    leftSd = -1;
 		    strcpy(leftStatus, "DISCONNECTED");
+		    // <---------------- code to reconect here
         } else {
             printf("Error: Left connection doesn't exist\r\n");
         }
@@ -256,7 +258,7 @@ int clientSocket(int port, char * host) {
                 exit(EXIT_FAILURE);
         }
         strcpy(rightStatus, "CONNECTED");
-        //Gets local port
+        //Gets local port //get local port <--------------------- TEMP MOVE INTO
         socklen_t len = sizeof(sad);
         getsockname(sd, (struct sockaddr*)&sad, &len);
         if((int) ntohs(sad.sin_port) > 0) {
@@ -301,8 +303,8 @@ int serverSocket(int port) {
                 fprintf(stderr, "Error: Listen failed\n");
                 exit(EXIT_FAILURE);
         }
-        //get local port
-       socklen_t len = sizeof(sad);
+        //get local port <--------------------- TEMP MOVE INTO
+        socklen_t len = sizeof(sad);
         getsockname(sd, (struct sockaddr*)&sad, &len);
         if((int) ntohs(sad.sin_port) > 0) {
             snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
@@ -375,18 +377,11 @@ void createConnection(char raddr[], int lport, int rport) {
                 sd = serverSocket(lport);
                 /* accepts and handles requests */
                 while (1) {
-                        alen = sizeof(cad);
                         strcpy(leftStatus, "LISTENING");
-                        if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
-                                fprintf(stderr, "Error: Accept failed\n");
-                                exit(EXIT_FAILURE);
-                        }
-                        strcpy(leftStatus, "CONNECTED");
-                        leftSd = sd2;
                         rightSd = -1;
                         FD_ZERO(&rfds);
                         FD_SET(STDIN_FILENO, &rfds);
-                        FD_SET(sd2, &rfds);
+                        FD_SET(sd, &rfds);
                         while(1) {
                             loopRfds = rfds;
                             retval = select (sd2+1, &loopRfds, NULL, NULL, NULL);
@@ -394,6 +389,17 @@ void createConnection(char raddr[], int lport, int rport) {
     	                       printf("Error: Select error\n");
     	                    } else if (FD_ISSET(STDIN_FILENO, &loopRfds)) {
                                 readInput(getch());
+    	                    } else if (FD_ISSET(sd, &loopRfds)) {
+    	                        alen = sizeof(cad);
+                                if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
+                                    fprintf(stderr, "Error: Accept failed\n");
+                                    exit(EXIT_FAILURE);
+                                }
+                                if(sd > 0) {
+                                    FD_SET(sd2, &rfds);
+                                    strcpy(leftStatus, "CONNECTED");
+                                    leftSd = sd2;
+                                }
     	                    } else if (FD_ISSET(sd2, &loopRfds)) {
     	                        if((n = recv(sd2, buf, sizeof(buf), 0)) == 0) {
     	                            //printf("\r\nDisconected\r\n");
@@ -418,18 +424,11 @@ void createConnection(char raddr[], int lport, int rport) {
                 sd3 = clientSocket(rport, raddr);
                 /* accept and handle requests */
                 while (1) {
-                        alen = sizeof(cad);
                         strcpy(leftStatus, "LISTENING");
-                        if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
-                                fprintf(stderr, "Error: Accept failed\n");
-                                exit(EXIT_FAILURE);
-                        }
-                        strcpy(leftStatus, "CONNECTED");
-                        leftSd = sd2;
                         rightSd = sd3;
                         FD_ZERO(&rfds);
                         FD_SET(sd3, &rfds);
-                        FD_SET(sd2, &rfds);
+                        FD_SET(sd, &rfds);
                         FD_SET(STDIN_FILENO, &rfds);
                         while(1) {
                             loopRfds = rfds;
@@ -438,41 +437,60 @@ void createConnection(char raddr[], int lport, int rport) {
     	                       printf("Error: Select error\n");
                             } else if (FD_ISSET(STDIN_FILENO, &loopRfds)) {
                                 readInput(getch());
-    	                    } else if (FD_ISSET(sd3, &loopRfds)) {
-    	                        if((n = recv(sd3, buf, sizeof(buf), 0)) == 0) {
-    	                            printf("\r\nDisconected\r\n");
-    	                        }
-    	                        //prints if rl to left
-    	                        if(strcmp(displayDir, "rl") == 0) {
-                                    if(buf[0] == 10) {
-                                        printf("\r\n");
-                                    } else {
-                                        write(1, buf, n);
-                                    }
-    	                        }
-    	                        if(lpl)
-    	                            send(sd3, buf, n, 0);
-    	                        else
-                                    send(sd2, buf, n, 0);
-    	                    } else if (FD_ISSET(sd2, &loopRfds)) {
-    	                        if((n = recv(sd2, buf, sizeof(buf), 0)) == 0) {
-    	                            printf("\r\nDisconected\r\n");
-    	                        }
-    	                        if(strcmp(displayDir, "lr") == 0) {
-                                    if(buf[0] == 10) {
-                                        printf("\r\n");
-                                    } else {
-                                        write(1, buf, n);
-                                    }
-    	                        }
-    	                        if(lpr) {
-    	                            if(send(sd2, buf, n, 0) == 0) {
-    	                                printf("\r\nDisconected\r\n");
-    	                            }
+                            } else if (FD_ISSET(sd, &loopRfds)) {
+                                alen = sizeof(cad);
+                                if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
+                                    fprintf(stderr, "Error: Accept failed\n");
+                                    exit(EXIT_FAILURE);
+                                }
+                                if(sd > 0) {
+                                    FD_SET(sd2, &rfds);
+                                    strcpy(leftStatus, "CONNECTED");
+                                    leftSd = sd2;
+                                }
+                            } else if (rightSd > -1 && FD_ISSET(sd3, &loopRfds)) {
+    	                        if((n = recv(rightSd, buf, sizeof(buf), 0)) == 0) {
+    	                            printf("\r\nRight side disconected\r\n");
+    	                            closesocket(rightSd);
+				                    FD_CLR(rightSd, &rfds);
+				                    rightSd = -1;
     	                        } else {
-                                    if(send(sd3, buf, n, 0) == 0) {
-                                        printf("\r\nDisconected\r\n");
-                                    }
+    	                            //prints if rl to left
+    	                            if(strcmp(displayDir, "rl") == 0) {
+                                        if(buf[0] == 10) {
+                                            printf("\r\n");
+                                        } else {
+                                            write(1, buf, n);
+                                        }
+    	                            }
+    	                            if(lpl)
+    	                                send(rightSd, buf, n, 0);
+    	                            else
+                                        send(leftSd, buf, n, 0);
+    	                        }
+    	                    } else if (leftSd > -1 && FD_ISSET(sd2, &loopRfds)) {
+    	                        if((n = recv(leftSd, buf, sizeof(buf), 0)) == 0) {
+    	                            printf("\r\nLeft side disconected\r\n");
+    	                            closesocket(leftSd);
+				                    FD_CLR(leftSd, &rfds);
+				                    leftSd = -1;
+    	                        } else {
+    	                            if(strcmp(displayDir, "lr") == 0) {
+                                        if(buf[0] == 10) {
+                                            printf("\r\n");
+                                        } else {
+                                            write(1, buf, n);
+                                        }
+    	                            }
+    	                            if(lpr) {
+    	                                if(send(leftSd, buf, n, 0) == 0) {
+    	                                    printf("\r\nDisconected via send\r\n"); // <--- Not working remove temp
+    	                                }
+    	                            } else {
+                                        if(send(rightSd, buf, n, 0) == 0) {
+                                            printf("\r\nDisconected via send\r\n"); // <--- Not working remove temp
+                                        }
+    	                            }
     	                        }
     	                    }
                         }
