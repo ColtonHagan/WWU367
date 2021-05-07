@@ -219,17 +219,14 @@ void proccessCmd(char cmd[]) {
         }
     } else if(strcmp(cmd,"drpl") == 0) {
         if(leftSd != -1) {
-            closesocket(leftSd);
-            FD_CLR(leftSd,&rfds);
+            closesocket(sd1);
+            FD_CLR(sd1,&rfds);
 		    leftSd = -1;
 		    strcpy(leftStatus, "DISCONNECTED");
-		    if(prsl) {
-			    strcpy(leftStatus, "LISTENING");
-			    int alen = sizeof(cad);
-				leftSd = accept(sd1, (struct sockaddr *) & cad, & alen);
-				FD_SET(leftSd, &rfds);
-				strcpy(leftStatus, "CONNECTED");
-			}
+			if(prsl) {
+			    sd1 = serverSocket(lport);
+			    FD_SET(sd1, &rfds);
+    	    }
         } else {
             printf("Error: Left connection doesn't exist\r\n");
         }
@@ -436,16 +433,13 @@ void createConnection() {
                                 }
     	                    } else if (FD_ISSET(sd2, &loopRfds)) {
     	                        if((n = recv(sd2, buf, sizeof(buf), 0)) == 0) {
-    	                            closesocket(leftSd);
-				                    FD_CLR(leftSd, &rfds);
+    	                            closesocket(sd);
+				                    FD_CLR(sd, &rfds);
 				                    leftSd = -1;
 				                    strcpy(leftStatus, "DISCONNECTED");
     	                            if(prsl) {
-    	                                strcpy(leftStatus, "LISTENING"); //THink this should all be done with sd1/sd not leftSd
-    	                                alen = sizeof(cad);
-				                        leftSd = accept(sd, (struct sockaddr *) & cad, & alen);
-				                        FD_SET(leftSd, &rfds);
-				                        strcpy(leftStatus, "CONNECTED");
+				                        sd = serverSocket(lport);
+				                        FD_SET(sd, &rfds);
     	                            }
     	                        }
                                 if(buf[0] == 10) {
@@ -527,17 +521,14 @@ void createConnection() {
     	                    } else if (leftSd > -1 && FD_ISSET(sd2, &loopRfds)) {
     	                        if((n = recv(leftSd, buf, sizeof(buf), 0)) == 0) {
     	                            printf("\r\nLeft side disconected\r\n"); //<-------- Temp
-    	                            closesocket(leftSd);
-				                    FD_CLR(leftSd, &rfds);
+    	                            closesocket(sd);
+				                    FD_CLR(sd, &rfds);
 				                    leftSd = -1;
 				                    strcpy(leftStatus, "DISCONNECTED");
 				                    //reconects if persistant
 				                    if(prsl) {
-				                        strcpy(leftStatus, "LISTENING");
-				                        alen = sizeof(cad);
-				                        leftSd = accept(sd, (struct sockaddr *) & cad, & alen);
-				                        FD_SET(leftSd, &rfds);
-				                        strcpy(leftStatus, "CONNECTED");
+				                        sd = serverSocket(lport);
+				                        FD_SET(sd, &rfds);
 				                    }
     	                        } else {
     	                            if(strcmp(displayDir, "lr") == 0) {
