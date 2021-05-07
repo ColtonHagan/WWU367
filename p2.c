@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #endif
 #include <unistd.h>
@@ -28,6 +29,11 @@ char displayDir[10]; //Direction of display
 char src[100]; //SRC file
 bool lpl = false; //looper left
 bool lpr = false; //looper right
+int leftSd, rightSd; //left/right sd, 0 if doesn't exist
+fd_set rfds; //select set
+char localIP[100] = "*", localPort[100] = "*";
+char rightPort[100] = "*", rightIP[100] = "*", leftIP[100] = "*", leftPort[100] ="*";
+char rightStatus[20] = "DISCONNECTED", leftStatus[20] = "DISCONNECTED";
 
 //For reading input
 int cmdLen; //length of commad
@@ -50,6 +56,8 @@ char* getOptCmd(char* cmd, char* baseCmd) {
 void proccessCmd(char cmd[]) {
     //quit
     if((cmd[0] == 'q') && (strlen(cmd) == 1)) {
+        closesocket(rightSd);
+        closesocket(leftSd);
         nocbreak();
         endwin();
         exit(0);
@@ -89,7 +97,7 @@ void proccessCmd(char cmd[]) {
             printf("Error: Can't display left, connection is head\r\n");
         }
     } else if(strcmp(cmd,"dsp") == 0) {
-        printf("Write display= %s\r\n", displayDir);
+        printf("Display = %s\r\n", displayDir);
     //loop cmds
     } else if (strcmp(cmd,"lpl") == 0) {
         lpl = true;
@@ -99,16 +107,42 @@ void proccessCmd(char cmd[]) {
         lpr = true;
     } else if (strcmp(cmd,"lpr0") == 0) {
         lpr = false;
-    //No current command
+    //drop
+    } else if (strcmp(cmd,"drpr") == 0) {
+        if(rightSd != -1) {
+            closesocket(rightSd);
+		    FD_CLR(rightSd,&rfds);
+		    rightSd = -1;
+		    strcpy(rightStatus, "DISCONNECTED");
+        } else {
+            printf("Error: Right connection doesn't exist\r\n");
+        }
+    } else if(strcmp(cmd,"drpl") == 0) {
+        if(leftSd != -1) {
+            closesocket(leftSd);
+            FD_CLR(leftSd,&rfds);
+		    leftSd = -1;
+		    strcpy(leftStatus, "DISCONNECTED");
+        } else {
+            printf("Error: Left connection doesn't exist\r\n");
+        }
+    //show connection STDIN_FILENO
+    } else if(strcmp(cmd, "rght") == 0) {
+        printf("%s:%s:%s:%s\r\n", localIP, localPort, rightIP, rightPort);
+        printf("%s\r\n",rightStatus);
+    } else if(strcmp(cmd, "lft") == 0) {
+        printf("%s:%s:%s:%s\r\n", leftIP, leftPort, localIP, localPort);
+        printf("%s\r\n",leftStatus);
+    //Not current command
     } else {
         printf("Error: Command not recognised\r\n");
     }
     refresh();
 }
 
-void readInput(char currentCh, int leftSd, int rightSd) {
+void readInput(char currentCh) {
         bool modeChange = false;
-        //moves to new line with enter
+        //moves to new start line with enter
         if(currentCh == 10) {
             printf("\r");
         } 
@@ -214,11 +248,19 @@ int clientSocket(int port, char * host) {
                 fprintf(stderr, "Error: Socket creation failed\n");
                 exit(EXIT_FAILURE);
         }
+        strcpy(rightStatus, "LISTENING");
         /* Connect the socket to the specified server. */
         if (connect(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
                 fprintf(stderr, "Error: Failed to make connection to %s:%d\n",
                         host, port);
                 exit(EXIT_FAILURE);
+        }
+        strcpy(rightStatus, "CONNECTED");
+        //Gets local port
+        socklen_t len = sizeof(sad);
+        getsockname(sd, (struct sockaddr*)&sad, &len);
+        if((int) ntohs(sad.sin_port) > 0) {
+            snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
         }
         return sd;
 }
@@ -259,6 +301,12 @@ int serverSocket(int port) {
                 fprintf(stderr, "Error: Listen failed\n");
                 exit(EXIT_FAILURE);
         }
+        //get local port
+       socklen_t len = sizeof(sad);
+        getsockname(sd, (struct sockaddr*)&sad, &len);
+        if((int) ntohs(sad.sin_port) > 0) {
+            snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
+        }
         return sd;
 }
 
@@ -268,13 +316,14 @@ void createConnection(char raddr[], int lport, int rport) {
         int n; /* number of characters read */
         int alen; /* length of address */
         char buf[1000]; /* buffer for string the server sends */
-        fd_set rfds;
+        fd_set loopRfds = rfds; //allows to drop
         int retval; 
         #ifdef WIN32
         WSADATA wsaData;
         WSAStartup(0x0101, & wsaData);
         #endif
         
+        //ncurses set up
         setlocale(LC_ALL,"");  
         initscr();  
         cbreak();
@@ -284,20 +333,31 @@ void createConnection(char raddr[], int lport, int rport) {
         keypad(stdscr, TRUE); 
         clear();
         
+        //gets local ip address
+        char hostBuf[100];
+        int localName = gethostname(hostBuf, sizeof(hostBuf));
+        struct hostent *host_entry = gethostbyname(hostBuf);
+        strcpy(localIP, inet_ntoa(*((struct in_addr*) host_entry->h_addr_list[0])));
+        
         //if head type
         if ((strcmp(type, "head") == 0)) {
                 sd = clientSocket(rport, raddr);
+                rightSd = sd;
+                leftSd = -1;
+                FD_ZERO(&rfds);
+                FD_SET(STDIN_FILENO, &rfds);
+                FD_SET(sd, &rfds);
                 while(1) {
-                    FD_ZERO(&rfds);
-                    FD_SET(STDIN_FILENO, &rfds);
-                    FD_SET(sd, &rfds);
-                    retval = select (sd+1, &rfds, NULL, NULL, NULL);
+                    loopRfds = rfds;
+                    retval = select (sd+1, &loopRfds, NULL, NULL, NULL);
                     if (retval == -1) {
     	               printf("Error: Select error\n");
-    	            } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
-    	               readInput(getch(), 0, sd);
-    	            } else if (FD_ISSET(sd, &rfds)) {
-    	               n = recv(sd, buf, sizeof(buf), 0);
+    	            } else if (FD_ISSET(STDIN_FILENO, &loopRfds)) {
+    	               readInput(getch());
+    	            } else if (FD_ISSET(sd, &loopRfds)) {
+    	               if((n = recv(sd, buf, sizeof(buf), 0)) == 0) {
+    	                    //printf("\r\nDisconected\r\n");
+    	               }
                        if(buf[0] == 10) {
                            printf("\r\n");
                        } else {
@@ -316,21 +376,28 @@ void createConnection(char raddr[], int lport, int rport) {
                 /* accepts and handles requests */
                 while (1) {
                         alen = sizeof(cad);
+                        strcpy(leftStatus, "LISTENING");
                         if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
                                 fprintf(stderr, "Error: Accept failed\n");
                                 exit(EXIT_FAILURE);
                         }
+                        strcpy(leftStatus, "CONNECTED");
+                        leftSd = sd2;
+                        rightSd = -1;
+                        FD_ZERO(&rfds);
+                        FD_SET(STDIN_FILENO, &rfds);
+                        FD_SET(sd2, &rfds);
                         while(1) {
-                            FD_ZERO(&rfds);
-                            FD_SET(STDIN_FILENO, &rfds);
-                            FD_SET(sd2, &rfds);
-                            retval = select (sd2+1, &rfds, NULL, NULL, NULL);
+                            loopRfds = rfds;
+                            retval = select (sd2+1, &loopRfds, NULL, NULL, NULL);
                             if (retval == -1) {
     	                       printf("Error: Select error\n");
-    	                    } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
-                                readInput(getch(), sd2, 0);
-    	                    } else if (FD_ISSET(sd2, &rfds)) {
-    	                        n = recv(sd2, buf, sizeof(buf), 0);
+    	                    } else if (FD_ISSET(STDIN_FILENO, &loopRfds)) {
+                                readInput(getch());
+    	                    } else if (FD_ISSET(sd2, &loopRfds)) {
+    	                        if((n = recv(sd2, buf, sizeof(buf), 0)) == 0) {
+    	                            //printf("\r\nDisconected\r\n");
+    	                        }
                                 if(buf[0] == 10) {
                                     printf("\r\n");
                                 } else {
@@ -345,7 +412,6 @@ void createConnection(char raddr[], int lport, int rport) {
                 }
                 /* Closes and exits */
                 closesocket(sd);
-                exit(0);
                 //If middle type
         } else if (strcmp(type, "middle") == 0) {
                 sd = serverSocket(lport);
@@ -353,22 +419,29 @@ void createConnection(char raddr[], int lport, int rport) {
                 /* accept and handle requests */
                 while (1) {
                         alen = sizeof(cad);
+                        strcpy(leftStatus, "LISTENING");
                         if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
                                 fprintf(stderr, "Error: Accept failed\n");
                                 exit(EXIT_FAILURE);
                         }
+                        strcpy(leftStatus, "CONNECTED");
+                        leftSd = sd2;
+                        rightSd = sd3;
+                        FD_ZERO(&rfds);
+                        FD_SET(sd3, &rfds);
+                        FD_SET(sd2, &rfds);
+                        FD_SET(STDIN_FILENO, &rfds);
                         while(1) {
-                            FD_ZERO(&rfds);
-                            FD_SET(sd3, &rfds);
-                            FD_SET(sd2, &rfds);
-                            FD_SET(STDIN_FILENO, &rfds);
-                            retval = select(max(sd3,sd2)+1, &rfds, NULL, NULL, NULL);
+                            loopRfds = rfds;
+                            retval = select(max(sd3,sd2)+1, &loopRfds, NULL, NULL, NULL);
                             if (retval == -1) {
     	                       printf("Error: Select error\n");
-                            } else if (FD_ISSET(STDIN_FILENO, &rfds)) {
-                                readInput(getch(), sd2, sd3);
-    	                    } else if (FD_ISSET(sd3, &rfds)) {
-    	                        n = recv(sd3, buf, sizeof(buf), 0);
+                            } else if (FD_ISSET(STDIN_FILENO, &loopRfds)) {
+                                readInput(getch());
+    	                    } else if (FD_ISSET(sd3, &loopRfds)) {
+    	                        if((n = recv(sd3, buf, sizeof(buf), 0)) == 0) {
+    	                            printf("\r\nDisconected\r\n");
+    	                        }
     	                        //prints if rl to left
     	                        if(strcmp(displayDir, "rl") == 0) {
                                     if(buf[0] == 10) {
@@ -381,8 +454,10 @@ void createConnection(char raddr[], int lport, int rport) {
     	                            send(sd3, buf, n, 0);
     	                        else
                                     send(sd2, buf, n, 0);
-    	                    } else if (FD_ISSET(sd2, &rfds)) {
-    	                        n = recv(sd2, buf, sizeof(buf), 0);
+    	                    } else if (FD_ISSET(sd2, &loopRfds)) {
+    	                        if((n = recv(sd2, buf, sizeof(buf), 0)) == 0) {
+    	                            printf("\r\nDisconected\r\n");
+    	                        }
     	                        if(strcmp(displayDir, "lr") == 0) {
                                     if(buf[0] == 10) {
                                         printf("\r\n");
@@ -390,19 +465,26 @@ void createConnection(char raddr[], int lport, int rport) {
                                         write(1, buf, n);
                                     }
     	                        }
-    	                        if(lpr)
-    	                            send(sd2, buf, n, 0);
-    	                        else
-                                    send(sd3, buf, n, 0);
+    	                        if(lpr) {
+    	                            if(send(sd2, buf, n, 0) == 0) {
+    	                                printf("\r\nDisconected\r\n");
+    	                            }
+    	                        } else {
+                                    if(send(sd3, buf, n, 0) == 0) {
+                                        printf("\r\nDisconected\r\n");
+                                    }
+    	                        }
     	                    }
                         }
-                        closesocket(sd2);
-                }
                 /* Closes and exits */
+                closesocket(sd2);
+                }
                 closesocket(sd);
                 closesocket(sd3);
-                exit(0);
         }
+        nocbreak();
+        endwin();
+        exit(0);
 }
 
 int main(int argc, char * argv[]) {
@@ -450,9 +532,11 @@ int main(int argc, char * argv[]) {
                         break;
                 case 2:
                         strcpy(raddr, optarg);
+                        strcpy(rightIP, optarg);
                         break;
                 case 3:
                         rport = atoi(optarg);
+                        strcpy(rightPort, optarg);
                         if (rport < 1 || rport > 65535) {
                                 printf("Error: rrport address out of range %d\n", rport);
                                 exit(EXIT_FAILURE);
@@ -460,6 +544,7 @@ int main(int argc, char * argv[]) {
                         break;
                 case 4:
                         lport = atoi(optarg);
+                        strcpy(leftPort, optarg);
                         if (lport < 1 || lport > 65535) {
                                 printf("Error: llport address out of range %d\n", lport);
                                 exit(EXIT_FAILURE);
@@ -506,6 +591,7 @@ int main(int argc, char * argv[]) {
                         exit(EXIT_FAILURE);
                 }
         }
+        
         if (type[0] == '\0') {
                 strcpy(type, "middle");
                 strcpy(outputDir, "right");
