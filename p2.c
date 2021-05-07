@@ -396,15 +396,17 @@ void createConnection() {
 				                FD_SET(rightSd, &rfds);
 				                strcpy(rightStatus, "CONNECTED");
 				            }
+    	               } else {
+                           if(buf[0] == 10) {
+                               printf("\r\n");
+                           } else {
+                               addch(buf[0]);
+                               refresh();
+                           }
+                           if(lpl) {
+                                send(sd, buf, n, 0);
+                           }
     	               }
-                       if(buf[0] == 10) {
-                           printf("\r\n");
-                       } else {
-                           write(1, buf, n);
-                       }
-                       if(lpl) {
-                            send(sd, buf, n, 0);
-                       }
     	            }
                 }
                 closesocket(sd);
@@ -450,15 +452,17 @@ void createConnection() {
 				                        sd = serverSocket(lport);
 				                        FD_SET(sd, &rfds);
     	                            }
+    	                        } else {
+                                    if(buf[0] == 10) {
+                                        printf("\r\n");
+                                    } else {
+                                        addch(buf[0]);
+                                        refresh();
+                                    }
+                                    if(lpr) {
+                                        send(sd2, buf, n, 0);
+                                    }
     	                        }
-                                if(buf[0] == 10) {
-                                    printf("\r\n");
-                                } else {
-                                    write(1, buf, n);
-                                }
-                                if(lpr) {
-                                    send(sd2, buf, n, 0);
-                                }
     	                    }
                         }
 	                    closesocket(sd2);
@@ -518,7 +522,8 @@ void createConnection() {
                                         if(buf[0] == 10) {
                                             printf("\r\n");
                                         } else {
-                                            write(1, buf, n);
+                                            addch(buf[0]);
+                                            refresh();
                                         }
     	                            }
     	                            if(lpl)
@@ -542,7 +547,8 @@ void createConnection() {
                                         if(buf[0] == 10) {
                                             printf("\r\n");
                                         } else {
-                                            write(1, buf, n);
+                                            addch(buf[0]);
+                                            refresh();
                                         }
     	                            }
     	                            if(lpr)
@@ -687,3 +693,4 @@ int main(int argc, char * argv[]) {
         }
         createConnection();
 }
+
