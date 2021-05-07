@@ -526,10 +526,10 @@ void createConnection() {
                                             refresh();
                                         }
     	                            }
-    	                            if(lpl)
+    	                            if(lpl) {
     	                                send(rightSd, buf, n, 0);
-    	                            else
-                                        send(leftSd, buf, n, 0);
+    	                            }
+                                    send(leftSd, buf, n, 0);
     	                        }
     	                    } else if (leftSd > -1 && FD_ISSET(sd2, &loopRfds)) {
     	                        if((n = recv(leftSd, buf, sizeof(buf), 0)) == 0) {
@@ -551,10 +551,10 @@ void createConnection() {
                                             refresh();
                                         }
     	                            }
-    	                            if(lpr)
+    	                            if(lpr) {
     	                                send(leftSd, buf, n, 0);
-                                    else 
-                                        send(rightSd, buf, n, 0);
+    	                            }
+                                    send(rightSd, buf, n, 0);
     	                        }
     	                    }
                         }
