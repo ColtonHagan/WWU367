@@ -312,7 +312,8 @@ void readInput(char currentCh) {
             move(y, x - 1);
             delch();
             cmd[cmdLen] = '\0';
-            cmdLen--;
+            if(cmdLen > 0)
+                cmdLen--;
         }
         refresh();
     }
