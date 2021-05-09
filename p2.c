@@ -88,12 +88,17 @@ int clientSocket(int port, char * host) {
     }
     strcpy(rightStatus, "LISTENING");
     /* Connect the socket to the specified server. */
-    if (connect(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
-        fprintf(stderr, "Error: Failed to make connection to %s:%d\n",
-            host, port);
-        nocbreak();
-        endwin();
-        exit(EXIT_FAILURE);
+    while(1) {
+        if (connect(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
+            if(!prsr) {
+                fprintf(stderr, "Error: Failed to make connection to %s:%d\n", host, port);
+                nocbreak();
+                endwin();
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            break;
+        }
     }
     strcpy(rightStatus, "CONNECTED");
     socklen_t len = sizeof(sad);
@@ -493,7 +498,7 @@ void createConnection() {
                                 endwin();
                                 exit(EXIT_FAILURE);
                             }
-                            FD_SET(sd2, & rfds);
+                            FD_SET(sd2,& rfds);
                             strcpy(leftStatus, "CONNECTED");
                         }
                     } else {
@@ -807,3 +812,5 @@ int main(int argc, char * argv[]) {
     }
     createConnection();
 }
+
+
