@@ -39,8 +39,10 @@ char type[10] = ""; //Type of connection (tail,head,middle)
 char outputDir[10]; //Direction of output
 char displayDir[10]; //Direction of display
 char src[100]; //SRC file
+
 bool lpl, lpr; //loopers
 bool prsl, prsr; //persistant
+
 
 //Socket info
 int sd1, leftSd, rightSd; //left/right sd, 0 if doesn't exist
@@ -521,8 +523,8 @@ void createConnection() {
         closesocket(sd2);
         //If middle type
     } else if (strcmp(type, "middle") == 0) {
-        sd = serverSocket(lport);
         sd3 = clientSocket(rport, raddr);
+        sd = serverSocket(lport);
         sd1 = sd; // <---- temp
         /* accept and handle requests */
         while(1) {
