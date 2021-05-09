@@ -718,7 +718,7 @@ int main(int argc, char * argv[]) {
             }
             strcpy(type, "head");
             strcpy(outputDir, "right");
-            strcpy(displayDir, "lr");
+            strcpy(displayDir, "rl");
             break;
         case 1:
             if (type[0] != '\0') {
@@ -727,7 +727,7 @@ int main(int argc, char * argv[]) {
             }
             strcpy(type, "tail");
             strcpy(outputDir, "left");
-            strcpy(displayDir, "rl");
+            strcpy(displayDir, "lr");
             break;
         case 2:
             strcpy(raddr, optarg);
