@@ -39,10 +39,8 @@ char type[10] = ""; //Type of connection (tail,head,middle)
 char outputDir[10]; //Direction of output
 char displayDir[10]; //Direction of display
 char src[100]; //SRC file
-
 bool lpl, lpr; //loopers
 bool prsl, prsr; //persistant
-
 
 //Socket info
 int sd1, leftSd, rightSd; //left/right sd, 0 if doesn't exist
@@ -108,6 +106,7 @@ int clientSocket(int port, char * host) {
     if ((int) ntohs(sad.sin_port) > 0) {
         snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
     }
+    snprintf(rightPort, 100, "%d", port);
     return sd;
 }
 
@@ -153,6 +152,7 @@ int serverSocket(int port) {
     if ((int) ntohs(sad.sin_port) > 0) {
         snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
     }
+    snprintf(leftPort, 100, "%d", port);
     return sd;
 }
 
@@ -274,7 +274,7 @@ void proccessCmd(char cmd[]) {
                         nocbreak();
                         endwin();
                         exit(EXIT_FAILURE);
-                    }
+                }
                 FD_SET(leftSd, & rfds);
                 strcpy(leftStatus, "CONNECTED");
             }
@@ -283,10 +283,16 @@ void proccessCmd(char cmd[]) {
         }
         //show connection STDIN_FILENO
     } else if (strcmp(cmd, "rght") == 0) {
-        printf("%s:%s:%s:%s\r\n", localIP, localPort, rightIP, rightPort);
+        if(strcmp(rightStatus,"DISCONNECTED") == 0)
+            printf("*:*:*:*\r\n");
+        else    
+            printf("%s:%s:%s:%s\r\n", localIP, localPort, rightIP, rightPort);
         printf("%s\r\n", rightStatus);
     } else if (strcmp(cmd, "lft") == 0) {
-        printf("%s:%s:%s:%s\r\n", leftIP, leftPort, localIP, localPort);
+        if(strcmp(leftStatus,"DISCONNECTED") == 0)
+            printf("*:*:*:*\r\n");
+        else 
+            printf("%s:%s:%s:%s\r\n", leftIP, leftPort, localIP, localPort);
         printf("%s\r\n", leftStatus);
         //Not current command
     } else if (strcmp(cmd, "prsr") == 0) {
@@ -815,5 +821,3 @@ int main(int argc, char * argv[]) {
     }
     createConnection();
 }
-
-
