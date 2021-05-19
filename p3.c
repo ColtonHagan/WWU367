@@ -413,43 +413,50 @@ void readInput(int currentCh) {
         }
     }
     
+    //del
+    /*if(currentCh == 126) {
+        wdelch(sw[4]);
+        updateWin(4);
+    }*/
+    
     //deals esc commands cause I could'nt find a better way
     if(!insertMode && currentCh == 27) {
         currentCh = wgetch(sw[4]);
-        currentCh = wgetch(sw[4]);
-        //moveleft
-        if(currentCh == 68) {
-            if (x != 0)
-                wmove(sw[4], y, x - 1);
-        //del
-        } else if (currentCh == 51) {
-            wdelch(sw[4]);
-        //home
-        } else if (currentCh == 72) {
-            wmove(sw[4],y, 0);
-        //end    
-        } else if (currentCh == 70) {
-            wmove(sw[4], y, cmdLen);
-        } else if (currentCh == 65) {
-            werase(sw[4]);
-            cmd[cmdLen] = '\0';
-            if(viewPrevCmd < prevCmdNum) {
-                strcpy(cmd, prevCmd[viewPrevCmd]);
-                cmdLen = strlen(cmd);
-                waddstr(sw[4], cmd);
-                viewPrevCmd++;
-            } else {
-                strcpy(cmd, prevCmd[prevCmdNum-1]);
-                cmdLen = strlen(cmd);
-                waddstr(sw[4],cmd);
+        if (currentCh == '[') {
+            currentCh = wgetch(sw[4]);
+            //moveleft
+            if(currentCh == 68) {
+                if (x != 0)
+                    wmove(sw[4], y, x - 1);
+            //del
+            } else if (currentCh == 51) {
+                wdelch(sw[4]);
+            //home
+            } else if (currentCh == 72) {
+                wmove(sw[4],y, 0);
+            //end    
+            } else if (currentCh == 70) {
+                wmove(sw[4], y, cmdLen);
+            //up
+            } else if (currentCh == 65) {
+                werase(sw[4]);
+                cmd[cmdLen] = '\0';
+                if(viewPrevCmd < prevCmdNum) {
+                    strcpy(cmd, prevCmd[viewPrevCmd]);
+                    cmdLen = strlen(cmd);
+                    waddstr(sw[4], cmd);
+                    viewPrevCmd++;
+                } else {
+                    strcpy(cmd, prevCmd[prevCmdNum-1]);
+                    cmdLen = strlen(cmd);
+                    waddstr(sw[4],cmd);
+                }
             }
-        } else {
-            wprintw(sw[1], "Ch is %d", currentCh);
-            updateWin(1);
         }
         updateWin(4);
-        currentCh = 263;
+        currentCh = 127;
     }
+    
     //prints slash without any meta        
     if (currentCh == '\\' && prevCh != '\\') {
         if(insertMode) {
@@ -460,7 +467,7 @@ void readInput(int currentCh) {
             updateWin(4);
         }
     //ignores some things
-    } else if (currentCh == 127 || currentCh ==  263) {
+    } else if (currentCh == 127 || currentCh ==  263 || currentCh ==  126) {
         //exits insert mode
     } else if (insertMode) {
         if (currentCh == 27 && prevCh != '\\') {
@@ -468,6 +475,7 @@ void readInput(int currentCh) {
             insertMode = false;
             cmd[0] = '\0';
             cmdLen = 0;
+            viewPrevCmd = 0;
             waddstr(sw[4], "\r\n");
             wmove(sw[4], 0, 0);
             updateWin(4);
@@ -494,10 +502,9 @@ void readInput(int currentCh) {
             //prints enter
             waddch(sw[4], currentCh);
             updateWin(4);
+            viewPrevCmd = 0;
             //proccess cmd
             cmd[cmdLen] = '\0';
-            wprintw(sw[0], "Cmd is %s", cmd);
-            updateWin(0);
             char tempCopy[10][20];
             for(int i = 0; i < 10; i++) {
                 strcpy(tempCopy[i], prevCmd[i]);
@@ -522,9 +529,6 @@ void readInput(int currentCh) {
             }
             waddch(sw[4],currentCh);
             updateWin(4);
-            wprintw(sw[3], "c");
-            updateWin(3);
-            //prevCmdNum = 0;
             cmd[cmdLen] = currentCh;
             cmdLen++;
         }
@@ -534,8 +538,6 @@ void readInput(int currentCh) {
         prevCh = currentCh;
     else
         prevCh = '\0';
-    //extra refresh to deal with outliers
-    //updateAll();
 }
 
 //Finds max of 2 given values and returns
