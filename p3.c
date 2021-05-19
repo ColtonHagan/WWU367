@@ -382,7 +382,7 @@ void proccessCmd(char cmd[]) {
 }
 
 //reads input via insert/cmd adding given char to either
-void readInput(char currentCh) {
+void readInput(int currentCh) {
     bool modeChange = false; 
     int x, y;
     getyx(sw[4], y, x);
@@ -405,16 +405,28 @@ void readInput(char currentCh) {
                 cmdLen--;
         }
     }
-    //deals with non char commands
+    //del
+    if (currentCh == 126 || currentCh == 330) {
+        //waddch(sw[4], ' ');
+        //wmove(sw[4], y, x + 1);
+        wdelch(sw[4]);
+        //wmove(sw[4], y, x - 1);
+        updateWin(4);
+    }
+    
+    //deals esc commands cause I could'nt find a better way
     if(!insertMode && currentCh == 27) {
+        currentCh = wgetch(sw[4]);
+        currentCh = wgetch(sw[4]);
         //moveleft
-        currentCh = wgetch(sw[4]);
-        currentCh = wgetch(sw[4]);
         if(currentCh == 68) {
-            //wprintw(sw[4],"%d", currentCh);
-            if (!(x == 0))
+            if (x != 0)
                 wmove(sw[4], y, x - 1);
+        } else {
+            wprintw(sw[0], "esc char = %c with value %d", currentCh, currentCh);
+            updateWin(0);
         }
+        
         updateWin(4);
         currentCh = 127;
     }
@@ -428,7 +440,7 @@ void readInput(char currentCh) {
             updateWin(4);
         }
     //ignores backspace
-    } else if (currentCh == 127 || currentCh ==  263) {
+    } else if (currentCh == 127 || currentCh == 126 || currentCh ==  263 || currentCh ==  330) {
         //exits insert mode
     } else if (insertMode) {
         if (currentCh == 27 && prevCh != '\\') {
@@ -438,9 +450,7 @@ void readInput(char currentCh) {
             cmdLen = 0;
             waddstr(sw[4], "\r\n");
             wmove(sw[4], 0, 0);
-            //printf("\r\nEntering command mode:\r\n");
-            //sends data
-            updateAll();
+            updateWin(4);
         } else {
             waddch(sw[5], currentCh);
             if (strcmp(outputDir, "left") == 0) {
@@ -448,7 +458,7 @@ void readInput(char currentCh) {
             } else {
                 send(rightSd, & currentCh, 1, 0);
             }
-            updateAll();
+            updateWin(5);
         }
         // command mode
     } else {
@@ -936,4 +946,5 @@ int main(int argc, char * argv[]) {
     }
     createConnection();
 }
+
 
