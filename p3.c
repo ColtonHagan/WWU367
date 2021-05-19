@@ -29,10 +29,16 @@ Program : Piggy2 program, networking program matching assignment description
 #include <string.h>
 #define PROTOPORT 36711 /* default port number */
 #define QLEN 6 /* size of request queue */
+#define NUMWINS 7
+#define RES_BUF_SIZE 80
 
 //functions
 void proccessCmd(char cmd[]);
 void readCmdFile(char filename[]);
+
+//ncurses
+WINDOW *w[NUMWINS];
+WINDOW *sw[NUMWINS];
 
 //for commands/arguments
 char type[10] = ""; //Type of connection (tail,head,middle)
@@ -58,6 +64,76 @@ int cmdLen; //length of commad
 char cmd[100]; //command
 char prevCh; //prevous char
 bool insertMode = false; //if in insert mode
+
+void updateWin(int i) {
+  touchwin(w[i]);
+  wrefresh(sw[i]);
+}
+
+void updateAll() {
+    for (int i=0;i<NUMWINS;i++) updateWin(i);
+}
+
+void createWindows() {
+    char response[RES_BUF_SIZE];
+      int WPOS[NUMWINS][4]= { {16,66,0,0},{16,66,0,66},{16,66,16,0},{16,66,16,66},
+        {3,132,32,0},{5,132,35,0},{3,132,40,0} };
+      setlocale(LC_ALL,"");
+      initscr();
+      refresh();
+      cbreak();
+      noecho();
+      nl();
+      intrflush(stdscr, FALSE); 
+      keypad(stdscr, TRUE);
+      clear();
+    
+     if (  !(LINES==43) || !(COLS==132) ) { 
+        move(0,0);
+        addstr("P3 requires a screen size of 132 columns and 43 rows");
+        move(1,0);
+        addstr("Set screen size to 132 by 43 and try again");
+        move(2,0);
+        addstr("Press enter to terminate program");
+        refresh();
+        getstr(response);            // Pause so we can see the screen 
+        endwin();
+        exit(EXIT_FAILURE);
+    }
+    
+    // create the 7 windows and the seven subwindows
+    for (int i=0;i<NUMWINS;i++) {
+         w[i]=newwin(WPOS[i][0],WPOS[i][1],WPOS[i][2],WPOS[i][3]);
+         scrollok(w[i],TRUE);
+         sw[i]=subwin(w[i],WPOS[i][0]-2,WPOS[i][1]-2,WPOS[i][2]+1,WPOS[i][3]+1);
+         scrollok(sw[i],TRUE);
+         wborder(w[i],0,0,0,0,0,0,0,0);
+         touchwin(w[i]);
+         wrefresh(w[i]);
+         wrefresh(sw[i]);
+    }
+    
+     // Write some stuff to the windows 
+     wmove(sw[0],0,0);
+     wprintw(sw[0],"Data arriving from the left");
+     wmove(sw[1],0,0);
+     waddstr(sw[1],"Data leaving right side");
+     wmove(sw[2],0,0);
+     waddstr(sw[2],"Data leaving the left side");
+     wmove(sw[3],0,0);
+     waddstr(sw[3],"Data arriving from the right"); 
+     wmove(sw[4],0,0);
+     waddstr(sw[4],"Commands");
+     wmove(sw[5],0,0);
+     waddstr(sw[5],"Input");
+     wmove(sw[6],0,0);
+     waddstr(sw[6],"Errors");
+    
+    // Place cursor at commands
+    updateAll();
+    wmove(sw[4],0,0); 
+    updateWin(4);
+}
 
 // Makes and returns socket for client (which sends information) from given port and host
 int clientSocket(int port, char * host) {
@@ -173,19 +249,18 @@ void readCmdFile(char filename[]) {
     char cmd[1000];
     fp = fopen(filename, "r");
     if (fp == NULL) {
-        refresh();
-        printf("\rError: File %s does not exist\r\n", filename);
-        refresh();
+        wprintw(sw[7], "\rFile %s does not exist\r\n", filename);
+        updateAll();
     } else {
         while (fgets(cmd, sizeof(cmd), fp)) {
             int len = strlen(cmd);
             if (len > 0 && cmd[len - 1] == '\n')
                 cmd[len - 1] = 0;
-            printf("\r%s\r\n", cmd);
+            wprintw(sw[5], "\r%s\r\n", cmd);
             proccessCmd(cmd);
-            refresh();
+            updateAll();
         }
-        refresh();
+        updateAll();
     }
 }
 
@@ -195,6 +270,7 @@ void proccessCmd(char cmd[]) {
     if ((cmd[0] == 'q') && (strlen(cmd) == 1)) {
         closesocket(rightSd);
         closesocket(leftSd);
+        closesocket(sd1);
         nocbreak();
         endwin();
         exit(0);
@@ -212,12 +288,12 @@ void proccessCmd(char cmd[]) {
         if (strcmp(type, "tail") == 0 || strcmp(type, "middle") == 0)
             strcpy(outputDir, "left");
         else
-            printf("Error: Can't change output direction to left, connection is head\r\n");
+            waddstr(sw[7],"Error: Can't change output direction to left, connection is head\r\n");
     } else if (strcmp(cmd, "outr") == 0) {
         if (strcmp(type, "head") == 0 || strcmp(type, "middle") == 0) {
             strcpy(outputDir, "right");
         } else {
-            printf("Error: Can't change output direction to right, connection is tail\r\n");
+             waddstr(sw[7],"Error: Can't change output direction to right, connection is tail\r\n");
         }
     } else if (strcmp(cmd, "out") == 0) {
         printf("Output direction is %s\r\n", outputDir);
@@ -226,12 +302,12 @@ void proccessCmd(char cmd[]) {
         if (strcmp(type, "head") == 0 || strcmp(type, "middle") == 0)
             strcpy(displayDir, "lr");
         else
-            printf("Error: Can't display right, connection is tail\r\n");
+            waddstr(sw[7],"Error: Can't display right, connection is tail\r\n");
     } else if (strcmp(cmd, "dsprl") == 0) {
         if (strcmp(type, "tail") == 0 || strcmp(type, "middle") == 0) {
             strcpy(displayDir, "rl");
         } else {
-            printf("Error: Can't display left, connection is head\r\n");
+             waddstr(sw[7],"Error: Can't display left, connection is head\r\n");
         }
     } else if (strcmp(cmd, "dsp") == 0) {
         printf("Display = %s\r\n", displayDir);
@@ -258,7 +334,7 @@ void proccessCmd(char cmd[]) {
                 strcpy(rightStatus, "CONNECTED");
             }
         } else {
-            printf("Error: Right connection doesn't exist\r\n");
+             waddstr(sw[7],"Error: Right connection doesn't exist\r\n");
         }
     } else if (strcmp(cmd, "drpl") == 0) {
         if (leftSd != -1) {
@@ -270,7 +346,7 @@ void proccessCmd(char cmd[]) {
                 strcpy(leftStatus, "LISTENING");
                 int alen = sizeof(cad);
                 if ((leftSd = accept(sd1, (struct sockaddr * ) & cad, & alen)) < 0) {
-                        fprintf(stderr, "Error: Accept failed\n");
+                        waddstr(sw[7],"Error: Accept failed\n");
                         nocbreak();
                         endwin();
                         exit(EXIT_FAILURE);
@@ -279,7 +355,7 @@ void proccessCmd(char cmd[]) {
                 strcpy(leftStatus, "CONNECTED");
             }
         } else {
-            printf("Error: Left connection doesn't exist\r\n");
+             waddstr(sw[7],"Error: Left connection doesn't exist\r\n");
         }
         //show connection STDIN_FILENO
     } else if (strcmp(cmd, "rght") == 0) {
@@ -300,37 +376,59 @@ void proccessCmd(char cmd[]) {
     } else if (strcmp(cmd, "prsl") == 0) {
         prsl = true;
     } else {
-        printf("Error: Command not recognised\r\n");
+         waddstr(sw[7],"Error: Command not recognised\r\n");
     }
-    refresh();
+    updateAll();
 }
 
 //reads input via insert/cmd adding given char to either
 void readInput(char currentCh) {
-    bool modeChange = false;
+    bool modeChange = false; 
+    int x, y;
+    getyx(sw[4], y, x);
+    
     //moves to new start line with enter
     if (currentCh == 10) {
-        printf("\r");
+        if(insertMode)
+            waddstr(sw[5],"\r");
+        else
+            waddstr(sw[4],"\r");
     }
+    
     //backspace
-    if (currentCh == 7 || currentCh == 127 || currentCh == 263) {
-        int x, y;
-        getyx(stdscr, y, x);
+    if (currentCh == 127 || currentCh == 263) {
         if (!(x == 0)) {
-            move(y, x - 1);
-            delch();
+            wmove(sw[4], y, x - 1);
+            wdelch(sw[4]);
             cmd[cmdLen] = '\0';
             if(cmdLen > 0)
                 cmdLen--;
         }
-        refresh();
     }
-    //prints slash without any meta
+    //deals with non char commands
+    if(!insertMode && currentCh == 27) {
+        //moveleft
+        currentCh = wgetch(sw[4]);
+        currentCh = wgetch(sw[4]);
+        if(currentCh == 68) {
+            //wprintw(sw[4],"%d", currentCh);
+            if (!(x == 0))
+                wmove(sw[4], y, x - 1);
+        }
+        updateWin(4);
+        currentCh = 127;
+    }
+    //prints slash without any meta        
     if (currentCh == '\\' && prevCh != '\\') {
-        addch(currentCh);
-        refresh();
-        //ignores backspace
-    } else if (currentCh == 7 || currentCh == 127 || currentCh > 255) {
+        if(insertMode) {
+            waddch(sw[5],currentCh);
+            updateWin(5);
+        } else {
+            waddch(sw[4], currentCh);
+            updateWin(4);
+        }
+    //ignores backspace
+    } else if (currentCh == 127 || currentCh ==  263) {
         //exits insert mode
     } else if (insertMode) {
         if (currentCh == 27 && prevCh != '\\') {
@@ -338,16 +436,19 @@ void readInput(char currentCh) {
             insertMode = false;
             cmd[0] = '\0';
             cmdLen = 0;
-            printf("\r\nEntering command mode:\r\n");
+            waddstr(sw[4], "\r\n");
+            wmove(sw[4], 0, 0);
+            //printf("\r\nEntering command mode:\r\n");
             //sends data
+            updateAll();
         } else {
-            addch(currentCh);
+            waddch(sw[5], currentCh);
             if (strcmp(outputDir, "left") == 0) {
                 send(leftSd, & currentCh, 1, 0);
             } else {
                 send(rightSd, & currentCh, 1, 0);
             }
-            refresh();
+            updateAll();
         }
         // command mode
     } else {
@@ -355,23 +456,28 @@ void readInput(char currentCh) {
         if (currentCh == 'i' && prevCh != '\\') {
             modeChange = true;
             insertMode = true;
-            printf("\r\nEntering insert mode:\r\n");
+            waddstr(sw[5], "\r\n");
+            wmove(sw[5], 0, 0);
+            //printf("\r\nEntering insert mode:\r\n");
             //proccess word/command on enter
         } else if (currentCh == 10) {
             //prints enter
-            addch(currentCh);
-            refresh();
+            waddch(sw[4],currentCh);
+            updateAll();
             //proccess cmd
             cmd[cmdLen] = '\0';
-            proccessCmd(cmd);
+            //proccessCmd(cmd); -- temp
             cmd[0] = '\0';
             cmdLen = 0;
-            //adds char to current comman
+            //adds char to current command
         } else {
-            addch(currentCh);
+            waddch(sw[4],currentCh);
+            updateWin(4);
+            wprintw(sw[0], "char = %c with value %d and size %d", currentCh, currentCh, sizeof(currentCh));
+            updateWin(0);
             cmd[cmdLen] = currentCh;
             cmdLen++;
-            refresh();
+            //updateAll();
         }
     }
     //update prevCH
@@ -380,7 +486,7 @@ void readInput(char currentCh) {
     else
         prevCh = '\0';
     //extra refresh to deal with outliers
-    refresh();
+    //updateAll();
 }
 
 //Finds max of 2 given values and returns
@@ -389,7 +495,7 @@ int max(int x, int y) {
 }
 // Creates "head", "tail", or "middle" connection based on given type, attaches to given port and address if needed/asked to
 void createConnection() {
-    int sd, sd2, sd3; /* socket descriptors */
+    int sd, sd2, sd3 = -1; /* socket descriptors */
     int n; /* number of characters read */
     int alen; /* length of address */
     char buf[1000]; /* buffer for string the server sends */
@@ -401,14 +507,7 @@ void createConnection() {
     #endif
 
     //ncurses set up
-    setlocale(LC_ALL, "");
-    initscr();
-    cbreak();
-    nl();
-    noecho();
-    intrflush(stdscr, FALSE);
-    keypad(stdscr, TRUE);
-    clear();
+    createWindows();
 
     //gets local ip address
     char hostBuf[100];
@@ -433,7 +532,7 @@ void createConnection() {
             if (retval == -1) {
                 printf("Error: Select error\n");
             } else if (FD_ISSET(STDIN_FILENO, & loopRfds)) {
-                readInput(getch());
+                readInput(wgetch(sw[4]));
             } else if (FD_ISSET(sd, & loopRfds)) {
                 if ((n = recv(sd, buf, sizeof(buf), 0)) == 0) {
                     closesocket(rightSd);
@@ -451,8 +550,8 @@ void createConnection() {
                     if (buf[0] == 10) {
                         printf("\r\n");
                     } else {
-                        addch(buf[0]);
-                        refresh();
+                        //addch(buf[0]); -- temp insert
+                        //updateAll();
                     }
                     if (lpl) {
                         send(sd, buf, n, 0);
@@ -479,7 +578,7 @@ void createConnection() {
                 if (retval == -1) {
                     printf("Error: Select error\n");
                 } else if (FD_ISSET(STDIN_FILENO, & loopRfds)) {
-                    readInput(getch());
+                    readInput(wgetch(sw[4]));
                 } else if (FD_ISSET(sd, &loopRfds)) {
                     alen = sizeof(cad);
                     if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
@@ -519,8 +618,8 @@ void createConnection() {
                         if (buf[0] == 10) {
                             printf("\r\n");
                         } else {
-                            addch(buf[0]);
-                            refresh();
+                            //addch(buf[0]); -- temp insert
+                            //updateAll();
                         }
                         if (lpr) {
                             send(sd2, buf, n, 0);
@@ -555,7 +654,7 @@ void createConnection() {
                 if (retval == -1) {
                     printf("Error: Select error\n");
                 } else if (FD_ISSET(STDIN_FILENO, & loopRfds)) {
-                    readInput(getch());
+                    readInput(wgetch(sw[4]));
                 } else if (FD_ISSET(sd, & loopRfds)) {
                     alen = sizeof(cad);
                     if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
@@ -594,8 +693,8 @@ void createConnection() {
                             if (buf[0] == 10) {
                                 printf("\r\n");
                             } else {
-                                addch(buf[0]);
-                                refresh();
+                                //addch(buf[0]); -- temp insert
+                                //updateAll();
                             }
                         }
                         if (lpl) {
@@ -627,8 +726,8 @@ void createConnection() {
                             if (buf[0] == 10) {
                                 printf("\r\n");
                             } else {
-                                addch(buf[0]);
-                                refresh();
+                                //addch(buf[0]); -temp insert
+                                //updateAll();
                             }
                         }
                         if (lpr) {
