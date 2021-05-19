@@ -40,8 +40,11 @@ void readCmdFile(char filename[]);
 WINDOW *w[NUMWINS];
 WINDOW *sw[NUMWINS];
 
-//ncurses helper
+//ncurses cmd helper
 bool cmdFull = true;
+char prevCmd[10][20];
+int  prevCmdNum = 0;
+int  viewPrevCmd = 0;
 
 //for commands/arguments
 char type[10] = ""; //Type of connection (tail,head,middle)
@@ -426,16 +429,26 @@ void readInput(int currentCh) {
             wmove(sw[4],y, 0);
         //end    
         } else if (currentCh == 70) {
-            int maxX, maxY;
-            getmaxyx(sw[4],maxY,maxX);
-            wmove(sw[4], y, maxX);
-            while((winch(sw[4]) & A_CHARTEXT ) == ' ') {
-                wmove(sw[4], y, maxX--);
+            wmove(sw[4], y, cmdLen);
+        } else if (currentCh == 65) {
+            werase(sw[4]);
+            cmd[cmdLen] = '\0';
+            if(viewPrevCmd < prevCmdNum) {
+                strcpy(cmd, prevCmd[viewPrevCmd]);
+                cmdLen = strlen(cmd);
+                waddstr(sw[4], cmd);
+                viewPrevCmd++;
+            } else {
+                strcpy(cmd, prevCmd[prevCmdNum-1]);
+                cmdLen = strlen(cmd);
+                waddstr(sw[4],cmd);
             }
-            updateWin(4);
+        } else {
+            wprintw(sw[1], "Ch is %d", currentCh);
+            updateWin(1);
         }
         updateWin(4);
-        currentCh = 127;
+        currentCh = 263;
     }
     //prints slash without any meta        
     if (currentCh == '\\' && prevCh != '\\') {
@@ -446,8 +459,8 @@ void readInput(int currentCh) {
             waddch(sw[4], currentCh);
             updateWin(4);
         }
-    //ignores backspace
-    } else if (currentCh == 127 || currentCh == 126 || currentCh ==  263 || currentCh ==  330) {
+    //ignores some things
+    } else if (currentCh == 127 || currentCh ==  263) {
         //exits insert mode
     } else if (insertMode) {
         if (currentCh == 27 && prevCh != '\\') {
@@ -485,9 +498,21 @@ void readInput(int currentCh) {
             cmd[cmdLen] = '\0';
             wprintw(sw[0], "Cmd is %s", cmd);
             updateWin(0);
+            char tempCopy[10][20];
+            for(int i = 0; i < 10; i++) {
+                strcpy(tempCopy[i], prevCmd[i]);
+            }
+            for(int i = 1; i < 10; i++) {
+                strcpy(prevCmd[i], tempCopy[i-1]);
+            }
+            strcpy(prevCmd[0], cmd);   
+            if(prevCmdNum < 10) {
+                prevCmdNum++;
+            }
             proccessCmd(cmd);
             cmd[0] = '\0';
             cmdLen = 0;
+            
             //adds char to current command
         } else {
             if(cmdFull) {
@@ -497,9 +522,11 @@ void readInput(int currentCh) {
             }
             waddch(sw[4],currentCh);
             updateWin(4);
+            wprintw(sw[3], "c");
+            updateWin(3);
+            //prevCmdNum = 0;
             cmd[cmdLen] = currentCh;
             cmdLen++;
-            //updateAll();
         }
     }
     //update prevCH
@@ -957,6 +984,7 @@ int main(int argc, char * argv[]) {
     }
     createConnection();
 }
+
 
 
 
