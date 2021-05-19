@@ -413,12 +413,6 @@ void readInput(int currentCh) {
         }
     }
     
-    //del
-    /*if(currentCh == 126) {
-        wdelch(sw[4]);
-        updateWin(4);
-    }*/
-    
     //deals esc commands cause I could'nt find a better way
     if(!insertMode && currentCh == 27) {
         currentCh = wgetch(sw[4]);
@@ -452,9 +446,9 @@ void readInput(int currentCh) {
                     waddstr(sw[4],cmd);
                 }
             }
+            updateWin(4);
+            currentCh = 127;
         }
-        updateWin(4);
-        currentCh = 127;
     }
     
     //prints slash without any meta        
