@@ -120,14 +120,14 @@ void createWindows() {
     }
     
      // Write some stuff to the windows 
-     wmove(sw[0],0,0);
+     /*wmove(sw[0],0,0);
      wprintw(sw[0],"Data arriving from the left");
      wmove(sw[1],0,0);
      waddstr(sw[1],"Data leaving right side");
      wmove(sw[2],0,0);
      waddstr(sw[2],"Data leaving the left side");
      wmove(sw[3],0,0);
-     waddstr(sw[3],"Data arriving from the right"); 
+     waddstr(sw[3],"Data arriving from the right"); */ // temp maybe
      wmove(sw[4],0,0);
      waddstr(sw[4],"Commands");
      wmove(sw[5],0,0);
@@ -307,7 +307,7 @@ void proccessCmd(char cmd[]) {
         wprintw(sw[4],"\r\nOutput direction is %s", outputDir);
         cmdFull = true;
         updateWin(4);
-        //display cmds
+    //loop cmds
     } else if (strcmp(cmd, "lpl") == 0) {
         lpl = true;
     } else if (strcmp(cmd, "lpl0") == 0) {
@@ -391,17 +391,6 @@ void readInput(int currentCh) {
     int x, y;
     getyx(sw[4], y, x);
     
-    //moves to new start line with enter
-    if (currentCh == 10) {
-        if(insertMode) {
-            waddch(sw[5],'\r');
-            updateWin(5);
-        } else {
-            waddch(sw[4],'\r');
-            updateWin(4);
-        }
-    }
-    
     //backspace
     if (currentCh == 127 || currentCh == 263) {
         if (!(x == 0)) {
@@ -435,23 +424,14 @@ void readInput(int currentCh) {
             } else if (currentCh == 65) {
                 werase(sw[4]);
                 cmd[cmdLen] = '\0';
-                wprintw(sw[3], "0 prevCmdNum = %d", prevCmdNum);
-                    updateWin(3);
                 if (prevCmdNum == 0) {
-                    wprintw(sw[3], "3 prevCmdNum = %d", prevCmdNum);
-                    updateWin(3);
                     werase(sw[4]);
-                    updateWin(4);
                 } else if(viewPrevCmd < prevCmdNum) {
-                    wprintw(sw[3], "1 prevCmdNum = %d", prevCmdNum);
-                    updateWin(3);
                     strcpy(cmd, prevCmd[viewPrevCmd]);
                     cmdLen = strlen(cmd);
                     waddstr(sw[4], cmd);
                     viewPrevCmd++;
                 } else {
-                    wprintw(sw[3], "2 prevCmdNum = %d", prevCmdNum);
-                    updateWin(3);
                     strcpy(cmd, prevCmd[prevCmdNum-1]);
                     cmdLen = strlen(cmd);
                     waddstr(sw[4],cmd);
@@ -473,7 +453,7 @@ void readInput(int currentCh) {
             updateWin(4);
         }
     //ignores some things
-    } else if (currentCh == 127 || currentCh ==  263 || currentCh ==  126) {
+    } else if (currentCh == 127 || currentCh >  255 || currentCh ==  126) {
         //exits insert mode
     } else if (insertMode) {
         if (currentCh == 27 && prevCh != '\\') {
@@ -482,15 +462,18 @@ void readInput(int currentCh) {
             cmd[0] = '\0';
             cmdLen = 0;
             viewPrevCmd = 0;
-            waddstr(sw[4], "\r\n");
             wmove(sw[4], 0, 0);
             updateWin(4);
         } else {
             waddch(sw[5], currentCh);
-            if (strcmp(outputDir, "left") == 0) {
-                send(leftSd, & currentCh, 1, 0);
-            } else {
-                send(rightSd, & currentCh, 1, 0);
+            if ((strcmp(outputDir, "left") == 0) && (leftSd != -1)) {
+                waddch(sw[3], currentCh);
+                send(leftSd, &currentCh, 1, 0);
+                updateWin(3);
+            } else if ((strcmp(outputDir, "right") == 0) && (rightSd != -1)) {
+                waddch(sw[1], currentCh);
+                send(rightSd, &currentCh, 1, 0);
+                updateWin(1);
             }
             updateWin(5);
         }
@@ -500,10 +483,10 @@ void readInput(int currentCh) {
         if (currentCh == 'i' && prevCh != '\\') {
             modeChange = true;
             insertMode = true;
-            waddstr(sw[5], "\r\n");
+            werase(sw[5]); // said okay in assignment page
             wmove(sw[5], 0, 0);
-            //printf("\r\nEntering insert mode:\r\n");
-            //proccess word/command on enter
+            updateWin(5);
+        //proccess word/command on enter
         } else if (currentCh == 10) {
             //prints enter
             waddch(sw[4], currentCh);
@@ -604,14 +587,17 @@ void createConnection() {
                         strcpy(rightStatus, "CONNECTED");
                     }
                 } else {
-                    if (buf[0] == 10) {
-                        //printf("\r\n"); -- temp
-                    } else {
-                        //addch(buf[0]); -- temp insert
-                        //updateAll();
+                    waddch(sw[2],buf[0]);
+                    updateWin(2);
+                    if (lpl && rightSd != -1) {
+                        send(rightSd, buf, n, 0);
+                        waddch(sw[1],buf[0]);
+                        updateWin(1);
                     }
-                    if (lpl) {
-                        send(sd, buf, n, 0);
+                    if(leftSd != -1) {
+                        send(leftSd, buf, n, 0);
+                        waddch(sw[3],buf[0]);
+                        updateWin(3);
                     }
                 }
             }
@@ -653,33 +639,36 @@ void createConnection() {
                     if (src[0] != '\0') {
                         readCmdFile(src);
                     }
-                } else if (sd2 > -1 && FD_ISSET(sd2, & loopRfds)) {
-                    if ((n = recv(sd2, buf, sizeof(buf), 0)) == 0) {
+                } else if (leftSd > -1 && FD_ISSET(leftSd, & loopRfds)) {
+                    if ((n = recv(leftSd, buf, sizeof(buf), 0)) == 0) {
                         closesocket(sd2);
-                        FD_CLR(sd2, & rfds);
+                        FD_CLR(leftSd, & rfds);
                         leftSd = -1;
                         strcpy(leftStatus, "DISCONNECTED");
                         if (prsl) {
                             strcpy(leftStatus, "LISTENING");
                             alen = sizeof(cad);
-                            if ((sd2 = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
+                            if ((leftSd = accept(sd, (struct sockaddr * ) & cad, & alen)) < 0) {
                                 fprintf(stderr, "Error: Accept failed\n");
                                 nocbreak();
                                 endwin();
                                 exit(EXIT_FAILURE);
                             }
-                            FD_SET(sd2,& rfds);
+                            FD_SET(leftSd,& rfds);
                             strcpy(leftStatus, "CONNECTED");
                         }
                     } else {
-                        if (buf[0] == 10) {
-                            //printf("\r\n"); -- temp
-                        } else {
-                            //addch(buf[0]); -- temp insert
-                            //updateAll();
+                        waddch(sw[0], buf[0]);
+                        updateWin(0);
+                        if (lpr && leftSd != -1) {
+                            send(leftSd, buf, n, 0);
+                            waddch(sw[3], buf[0]);
+                            updateWin(3);
                         }
-                        if (lpr) {
-                            send(sd2, buf, n, 0);
+                        if(rightSd != -1) {
+                            send(rightSd, buf, n, 0);
+                            waddch(sw[1], buf[0]);
+                            updateWin(1);
                         }
                     }
                 }
@@ -744,19 +733,16 @@ void createConnection() {
                             strcpy(rightStatus, "CONNECTED");
                         }
                     } else {
-                        //prints if rl to left
-                        if (strcmp(displayDir, "rl") == 0) {
-                            if (buf[0] == 10) {
-                                //printf("\r\n"); --tenp
-                            } else {
-                                //addch(buf[0]); -- temp insert
-                                //updateAll();
-                            }
-                        }
+                        waddch(sw[2],buf[0]);
+                        updateWin(2);
                         if (lpl) {
                             send(rightSd, buf, n, 0);
+                            waddch(sw[1],buf[0]);
+                            updateWin(1);
                         }
                         send(leftSd, buf, n, 0);
+                        waddch(sw[3],buf[0]);
+                        updateWin(3);
                     }
                 } else if (leftSd > -1 && FD_ISSET(sd2, & loopRfds)) {
                     if ((n = recv(leftSd, buf, sizeof(buf), 0)) == 0) {
@@ -778,18 +764,16 @@ void createConnection() {
                             strcpy(leftStatus, "CONNECTED");
                         }
                     } else {
-                        if (strcmp(displayDir, "lr") == 0) {
-                            if (buf[0] == 10) {
-                                //printf("\r\n"); -- temp
-                            } else {
-                                //addch(buf[0]); -temp insert
-                                //updateAll();
-                            }
-                        }
+                        waddch(sw[0], buf[0]);
+                        updateWin(0);
                         if (lpr) {
                             send(leftSd, buf, n, 0);
+                            waddch(sw[3], buf[0]);
+                            updateWin(3);
                         }
                         send(rightSd, buf, n, 0);
+                        waddch(sw[1], buf[0]);
+                        updateWin(1);
                     }
                 }
             }
@@ -855,18 +839,6 @@ int main(int argc, char * argv[]) {
             7
         },
         {
-            "dsplr",
-            no_argument,
-            NULL,
-            8
-        },
-        {
-            "dsprl",
-            no_argument,
-            NULL,
-            9
-        },
-        {
             "lpr",
             no_argument,
             NULL,
@@ -885,7 +857,6 @@ int main(int argc, char * argv[]) {
             0
         }
     };
-    char tempDisDir[5] = "";
     int opt = 0; //Arg opt
 
     //Reads in arguments
@@ -941,22 +912,6 @@ int main(int argc, char * argv[]) {
         case 7:
             prsr = true;
             break;
-        case 8:
-            if (tempDisDir[0] != '\0') {
-                strcpy(tempDisDir, "lr");
-            } else {
-                printf("Error: Both -dsplf and -dsplr roles requested\n");
-                exit(0);
-            }
-            break;
-        case 9:
-            if (tempDisDir[0] != '\0') {
-                strcpy(tempDisDir, "rl");
-            } else {
-                printf("Error: Both -dsplf and -dsplr roles requested\n");
-                exit(0);
-            }
-            break;
         case 10:
             lpr = true;
             break;
@@ -971,10 +926,6 @@ int main(int argc, char * argv[]) {
     if (type[0] == '\0') {
         strcpy(type, "middle");
         strcpy(outputDir, "right");
-        if (tempDisDir[0] != '\0')
-            strcpy(displayDir, tempDisDir);
-        else
-            strcpy(displayDir, "lr");
     }
 
     if (raddr[0] == '\0' && (strcmp(type, "middle") == 0)) {
@@ -992,6 +943,7 @@ int main(int argc, char * argv[]) {
     }
     createConnection();
 }
+
 
 
 
