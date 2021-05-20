@@ -435,16 +435,28 @@ void readInput(int currentCh) {
             } else if (currentCh == 65) {
                 werase(sw[4]);
                 cmd[cmdLen] = '\0';
-                if(viewPrevCmd < prevCmdNum) {
+                wprintw(sw[3], "0 prevCmdNum = %d", prevCmdNum);
+                    updateWin(3);
+                if (prevCmdNum == 0) {
+                    wprintw(sw[3], "3 prevCmdNum = %d", prevCmdNum);
+                    updateWin(3);
+                    werase(sw[4]);
+                    updateWin(4);
+                } else if(viewPrevCmd < prevCmdNum) {
+                    wprintw(sw[3], "1 prevCmdNum = %d", prevCmdNum);
+                    updateWin(3);
                     strcpy(cmd, prevCmd[viewPrevCmd]);
                     cmdLen = strlen(cmd);
                     waddstr(sw[4], cmd);
                     viewPrevCmd++;
                 } else {
+                    wprintw(sw[3], "2 prevCmdNum = %d", prevCmdNum);
+                    updateWin(3);
                     strcpy(cmd, prevCmd[prevCmdNum-1]);
                     cmdLen = strlen(cmd);
                     waddstr(sw[4],cmd);
                 }
+                
             }
             updateWin(4);
             currentCh = 127;
