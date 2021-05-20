@@ -58,12 +58,9 @@ bool lpl, lpr; //loopers
 bool prsl, prsr; //persistant
 
 //Socket info
-int sd1, leftSd, rightSd = -1; //left/right sd, 0 if doesn't exist
+int leftPassive, rightPassive, leftSd, rightSd = -1; //left/right sd, -1 if doesn't exist
 fd_set rfds; //select set
 struct sockaddr_in cad; /* structure to hold client's address */
-char localIP[100] = "*", localPort[100] = "*";
-char rightPort[100] = "*", rightIP[100] = "*", leftIP[100] = "*", leftPort[100] = "*";
-char rightStatus[20] = "DISCONNECTED", leftStatus[20] = "DISCONNECTED";
 char raddr[1000] = ""; //rraddr
 int lport = PROTOPORT; //llport
 int rport = PROTOPORT; //rrport
@@ -84,7 +81,7 @@ void updateAll() {
 }
 
 /* Returns a str in the form my_IP:my_port */
-char * my_info(int sock, int port) {
+/*char *my_info(int sock, int port) {
     struct sockaddr_in myaddr;
     socklen_t my_addr_len = sizeof(myaddr);
     char straddr[INET_ADDRSTRLEN];
@@ -104,6 +101,55 @@ char * my_info(int sock, int port) {
         strcat(local_info, ":");
         strcat(local_info, myport_str);
         return local_info;
+    } else {
+        return "*:*";
+    }
+}*/
+
+char *localInfo(int socket) {
+    char portString[100];
+    char* localInfoOut = malloc(100);
+    
+    //gets local address
+    char hostBuf[100];
+    int localName = gethostname(hostBuf, sizeof(hostBuf));
+    struct hostent *host = gethostbyname(hostBuf);
+    strcpy(localInfoOut, inet_ntoa( * ((struct in_addr * ) host -> h_addr_list[0])));
+    strcat(localInfoOut,":");
+    
+    //gets local port
+    struct sockaddr_in sin;
+    int addrlen = sizeof(sin);
+    if(getsockname(socket, (struct sockaddr *) &sin, &addrlen) == 0 && sin.sin_family == AF_INET && addrlen == sizeof(sin)) {
+        int port = ntohs(sin.sin_port);
+        if(port > 0) {
+            snprintf(portString, 100, "%d", port);
+            strcat(localInfoOut,portString);
+        } else {
+            strcat(localInfoOut,"*");
+        }
+    } else {
+        strcat(localInfoOut,"*");
+    }
+    
+    return localInfoOut;
+}
+
+char *socketInfo(int socket) {
+    char socketPort[100];
+    char socketIp[INET_ADDRSTRLEN];
+    char* socketInfoOut = malloc(100);
+    
+    if(socket > 0) {
+        struct sockaddr_in sad;
+	    socklen_t sad_len = sizeof(sad);
+	    
+        getpeername(socket,(struct sockaddr*)&sad,&sad_len);
+		inet_ntop(AF_INET, &sad.sin_addr,socketIp, sizeof(socketIp));	
+		sprintf(socketPort,"%d",ntohs(sad.sin_port));
+		strcpy(socketInfoOut, socketIp);
+		strcat(socketInfoOut, ":");
+        strcat(socketInfoOut, socketPort);
     } else {
         return "*:*";
     }
@@ -239,7 +285,6 @@ int clientSocket(int port, char * host) {
         fprintf(stderr, "Error: Socket creation failed\n");
         exit(EXIT_FAILURE);
     }
-    strcpy(rightStatus, "LISTENING");
     /* Connect the socket to the specified server. */
     while (1) {
         if (connect(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
@@ -253,13 +298,6 @@ int clientSocket(int port, char * host) {
             break;
         }
     }
-    strcpy(rightStatus, "CONNECTED");
-    socklen_t len = sizeof(sad);
-    getsockname(sd, (struct sockaddr * ) & sad, & len);
-    if ((int) ntohs(sad.sin_port) > 0) {
-        snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
-    }
-    snprintf(rightPort, 100, "%d", port);
     return sd;
 }
 
@@ -303,9 +341,9 @@ int serverSocket(int port) {
     socklen_t len = sizeof(sad);
     getsockname(sd, (struct sockaddr * ) & sad, & len);
     if ((int) ntohs(sad.sin_port) > 0) {
-        snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
+        //snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
     }
-    snprintf(leftPort, 100, "%d", port);
+    //snprintf(leftPort, 100, "%d", port);
     return sd;
 }
 
@@ -347,7 +385,7 @@ void proccessCmd(char cmd[]) {
     if ((cmd[0] == 'q') && (strlen(cmd) == 1)) {
         closesocket(rightSd);
         closesocket(leftSd);
-        closesocket(sd1);
+        closesocket(leftPassive);
         nocbreak();
         endwin();
         exit(0);
@@ -393,12 +431,9 @@ void proccessCmd(char cmd[]) {
             closesocket(rightSd);
             FD_CLR(rightSd, & rfds);
             rightSd = -1;
-            strcpy(rightStatus, "DISCONNECTED");
             if (prsr) {
-                strcpy(rightStatus, "LISTENING");
                 rightSd = clientSocket(rport, raddr);
                 FD_SET(rightSd, & rfds);
-                strcpy(rightStatus, "CONNECTED");
             }
         } else {
             waddstr(sw[6], "\r\nError: Right connection doesn't exist");
@@ -409,18 +444,15 @@ void proccessCmd(char cmd[]) {
             closesocket(leftSd);
             FD_CLR(leftSd, & rfds);
             leftSd = -1;
-            strcpy(leftStatus, "DISCONNECTED");
             if (prsl) {
-                strcpy(leftStatus, "LISTENING");
                 int alen = sizeof(cad);
-                if ((leftSd = accept(sd1, (struct sockaddr * ) & cad, & alen)) < 0) {
+                if ((leftSd = accept(leftPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
                     waddstr(sw[6], "\r\nError: Accept failed");
                     nocbreak();
                     endwin();
                     exit(EXIT_FAILURE);
                 }
                 FD_SET(leftSd, & rfds);
-                strcpy(leftStatus, "CONNECTED");
             }
         } else {
             waddstr(sw[6], "\r\nError: Left connection doesn't exist");
@@ -428,26 +460,38 @@ void proccessCmd(char cmd[]) {
         }
         //show connection STDIN_FILENO
     } else if (strcmp(cmd, "rght") == 0) {
-        if (strcmp(rightStatus, "DISCONNECTED") == 0)
-            wprintw(sw[4], "%s:%s:*:* ", localIP, localPort);
-        else
-            wprintw(sw[4], "%s:%s:%s:%s ", localIP, localPort, rightIP, rightPort);
-        wprintw(sw[4], "%s", rightStatus);
+        if(rightPassive > 0)
+            wprintw(sw[4], "%s:%s ",localInfo(rightPassive),socketInfo(rightSd));
+        else if (rightSd > 0)
+            wprintw(sw[4], "%s:%s ",localInfo(rightSd),socketInfo(rightSd));
+        else 
+            waddstr(sw[4], "*:*:*:* ");
+        if(rightSd > 0) {
+            waddstr(sw[4], "CONNECTED");
+        } else if (rightPassive > 0) {
+            waddstr(sw[4], "LISTENING");
+        } else {
+            waddstr(sw[4], "DISCONNECTED");
+        }
         cmdFull = true;
         updateWin(4);
-        /*
-                wprintw(sw[4], "%s", my_info(rightSd,rport));
-                cmdFull = true;
-                updateWin(4);*/
     } else if (strcmp(cmd, "lft") == 0) {
-        if (strcmp(leftStatus, "DISCONNECTED") == 0)
-            wprintw(sw[4], "*:*::%s:%s ", localIP, localPort);
+        if (leftPassive > 0)
+            wprintw(sw[4], "%s:%s ",socketInfo(leftSd), localInfo(leftPassive));
+        else if (leftSd > 0)
+            wprintw(sw[4], "%s:%s: ",socketInfo(leftSd), localInfo(leftSd));
         else
-            wprintw(sw[4], "%s:%s:%s:%s ", leftIP, leftPort, localIP, localPort);
-        wprintw(sw[4], "%s", leftStatus);
+            waddstr(sw[4], "*:*:*:* ");
+        if(leftSd > 0) {
+            waddstr(sw[4], "CONNECTED");
+        } else if (leftPassive > 0) {
+            waddstr(sw[4], "LISTENING");
+        } else {
+            waddstr(sw[4], "DISCONNECTED");
+        }
         cmdFull = true;
         updateWin(4);
-        //Not current command
+    //Not current command
     } else if (strcmp(cmd, "prsr") == 0) {
         prsr = true;
     } else if (strcmp(cmd, "prsl") == 0) {
@@ -622,13 +666,6 @@ void createConnection() {
 
     //ncurses set up
     createWindows();
-
-    //gets local ip address
-    char hostBuf[100];
-    int localName = gethostname(hostBuf, sizeof(hostBuf));
-    struct hostent * host_entry = gethostbyname(hostBuf);
-    strcpy(localIP, inet_ntoa( * ((struct in_addr * ) host_entry -> h_addr_list[0])));
-
     FD_ZERO(&rfds);
     
     if((strcmp(type,"head") == 0 ) || (strcmp(type,"middle") == 0 )) {
@@ -636,19 +673,19 @@ void createConnection() {
         FD_SET(rightSd, & rfds);
     }
     if((strcmp(type,"tail") == 0 ) || (strcmp(type,"middle") == 0 )) {
-        sd1 = serverSocket(lport);
-        FD_SET(sd1, & rfds);
+        leftPassive = serverSocket(lport);
+        FD_SET(leftPassive, & rfds);
     }
     
     /* accept and handle requests */
     while (1) {
         FD_SET(STDIN_FILENO, & rfds);
-        if (src[0] != '\0' && sd1 != -1) {
+        if (src[0] != '\0' && leftPassive != -1) {
             readCmdFile(src);
         }
         while (1) {
             loopRfds = rfds;
-            retval = select(max(rightSd, max(rightSd, max(sd1, leftSd))) + 1, & loopRfds, NULL, NULL, NULL);
+            retval = select(max(rightSd, max(rightSd, max(leftPassive, leftSd))) + 1, & loopRfds, NULL, NULL, NULL);
             //select error
             if (retval == -1) {
                 wprintw(sw[6], "\r\nError: Select error");
@@ -657,10 +694,9 @@ void createConnection() {
             } else if (FD_ISSET(STDIN_FILENO, & loopRfds)) {
                 readInput(wgetch(sw[4]));
             //passive connection
-            } else if (FD_ISSET(sd1, & loopRfds)) {
-                strcpy(leftStatus, "LISTENING");
+            } else if (FD_ISSET(leftPassive, & loopRfds)) {
                 alen = sizeof(cad);
-                if ((leftSd = accept(sd1, (struct sockaddr * ) & cad, & alen)) < 0) {
+                if ((leftSd = accept(leftPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
                     fprintf(stderr, "Error: Accept failed\n");
                     nocbreak();
                     endwin();
@@ -668,7 +704,6 @@ void createConnection() {
                 }
                 //connects to server
                 FD_SET(leftSd, & rfds);
-                strcpy(leftStatus, "CONNECTED");
 
                 if (src[0] != '\0') {
                     readCmdFile(src);
@@ -679,13 +714,10 @@ void createConnection() {
                     closesocket(rightSd);
                     FD_CLR(rightSd, & rfds);
                     rightSd = -1;
-                    strcpy(rightStatus, "DISCONNECTED");
                     //reconects if persistant
                     if (prsr) {
-                        strcpy(rightStatus, "LISTENING");
                         rightSd = clientSocket(rport, raddr);
                         FD_SET(rightSd, & rfds);
-                        strcpy(rightStatus, "CONNECTED");
                     } else {
                         //nocbreak();
                         //endwin();
@@ -711,19 +743,16 @@ void createConnection() {
                     closesocket(leftSd);
                     FD_CLR(leftSd, & rfds);
                     leftSd = -1;
-                    strcpy(leftStatus, "DISCONNECTED");
                     //reconects if persistant
                     if (prsl) {
-                        strcpy(leftStatus, "LISTENING");
                         alen = sizeof(cad);
-                        if ((leftSd = accept(sd1, (struct sockaddr * ) & cad, & alen)) < 0) {
+                        if ((leftSd = accept(leftPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
                             fprintf(stderr, "Error: Accept failed\n");
                             nocbreak();
                             endwin();
                             exit(EXIT_FAILURE);
                         }
                         FD_SET(leftSd, & rfds);
-                        strcpy(leftStatus, "CONNECTED");
                     } else {
                         //nocbreak();
                         //endwin();
@@ -749,7 +778,7 @@ void createConnection() {
         closesocket(leftSd);
     }
     /* Closes and exits */
-    closesocket(sd1);
+    closesocket(leftPassive);
     closesocket(rightSd);
     nocbreak();
     endwin();
@@ -850,11 +879,10 @@ int main(int argc, char * argv[]) {
             break;
         case 2:
             strcpy(raddr, optarg);
-            strcpy(rightIP, optarg);
             break;
         case 3:
             rport = atoi(optarg);
-            strcpy(rightPort, optarg);
+            //strcpy(rightPort, optarg);
             if (rport < 1 || rport > 65535) {
                 printf("Error: rrport address out of range %d\n", rport);
                 exit(EXIT_FAILURE);
@@ -862,7 +890,7 @@ int main(int argc, char * argv[]) {
             break;
         case 4:
             lport = atoi(optarg);
-            strcpy(leftPort, optarg);
+            //strcpy(leftPort, optarg);
             if (lport < 1 || lport > 65535) {
                 printf("Error: llport address out of range %d\n", lport);
                 exit(EXIT_FAILURE);
