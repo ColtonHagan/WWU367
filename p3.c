@@ -80,32 +80,6 @@ void updateAll() {
     for (int i = 0; i < NUMWINS; i++) updateWin(i);
 }
 
-/* Returns a str in the form my_IP:my_port */
-/*char *my_info(int sock, int port) {
-    struct sockaddr_in myaddr;
-    socklen_t my_addr_len = sizeof(myaddr);
-    char straddr[INET_ADDRSTRLEN];
-    char myport_str[6];
-    char * local_info = malloc(100);
-    char localhost[32];
-    if (sock != -1) {
-        gethostname(localhost, sizeof(localhost));
-        struct hostent * h_hostent = gethostbyname(localhost);
-        inet_ntop(AF_INET, h_hostent -> h_addr_list[0], straddr, sizeof(straddr));
-        strcat(local_info, straddr);
-
-        if (port > 0) {
-            sprintf(myport_str, "%d", port);
-        }
-        sprintf(myport_str, "*");
-        strcat(local_info, ":");
-        strcat(local_info, myport_str);
-        return local_info;
-    } else {
-        return "*:*";
-    }
-}*/
-
 char *localInfo(int socket) {
     char portString[100];
     char* localInfoOut = malloc(100);
@@ -235,16 +209,6 @@ void createWindows() {
         wrefresh(w[i]);
         wrefresh(sw[i]);
     }
-
-    // Write some stuff to the windows 
-    /*wmove(sw[0],0,0);
-    wprintw(sw[0],"Data arriving from the left");
-    wmove(sw[1],0,0);
-    waddstr(sw[1],"Data leaving right side");
-    wmove(sw[2],0,0);
-    waddstr(sw[2],"Data leaving the left side");
-    wmove(sw[3],0,0);
-    waddstr(sw[3],"Data arriving from the right"); */ // temp maybe
     wmove(sw[4], 0, 0);
     waddstr(sw[4], "Commands");
     wmove(sw[5], 0, 0);
@@ -338,12 +302,6 @@ int serverSocket(int port) {
         fprintf(stderr, "Error: Listen failed\n");
         exit(EXIT_FAILURE);
     }
-    socklen_t len = sizeof(sad);
-    getsockname(sd, (struct sockaddr * ) & sad, & len);
-    if ((int) ntohs(sad.sin_port) > 0) {
-        //snprintf(localPort, 100, "%d", (int) ntohs(sad.sin_port));
-    }
-    //snprintf(leftPort, 100, "%d", port);
     return sd;
 }
 
@@ -427,7 +385,18 @@ void proccessCmd(char cmd[]) {
         lpr = false;
         //drop
     } else if (strcmp(cmd, "drpr") == 0) {
-        if (rightSd != -1) {
+        if(rightPassive > 0) {
+            closesocket(rightPassive);
+            closesocket(rightSd);
+            FD_CLR(rightPassive, & rfds);
+            FD_CLR(rightSd, & rfds);
+            rightPassive = -1;
+            rightSd = -1;
+            if (prsr) {
+                rightPassive = serverSocket(rport);
+                FD_SET(rightPassive, &rfds);
+            }
+        } else if (rightSd > 0) {
             closesocket(rightSd);
             FD_CLR(rightSd, & rfds);
             rightSd = -1;
@@ -437,35 +406,38 @@ void proccessCmd(char cmd[]) {
             }
         } else {
             waddstr(sw[6], "\r\nError: Right connection doesn't exist");
-            updateWin(6);
+            updateWin(6); 
         }
     } else if (strcmp(cmd, "drpl") == 0) {
-        if (leftSd != -1) {
+        if(leftPassive > 0) {
+            closesocket(leftPassive);
+            closesocket(leftSd);
+            FD_CLR(leftPassive, & rfds);
+            FD_CLR(leftSd, & rfds);
+            leftPassive = -1;
+            leftSd = -1;
+            if (prsl) {
+                leftPassive = serverSocket(lport);
+                FD_SET(leftPassive, &rfds);
+            }
+        } else if (leftSd > 0) {
             closesocket(leftSd);
             FD_CLR(leftSd, & rfds);
             leftSd = -1;
             if (prsl) {
-                int alen = sizeof(cad);
-                if ((leftSd = accept(leftPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
-                    waddstr(sw[6], "\r\nError: Accept failed");
-                    nocbreak();
-                    endwin();
-                    exit(EXIT_FAILURE);
-                }
-                FD_SET(leftSd, & rfds);
+                leftSd = clientSocket(lport, raddr); //raddr is temp
+                FD_SET(leftSd, &rfds);
             }
         } else {
             waddstr(sw[6], "\r\nError: Left connection doesn't exist");
-            updateWin(6);
+            updateWin(6); 
         }
         //show connection STDIN_FILENO
     } else if (strcmp(cmd, "rght") == 0) {
         if(rightPassive > 0)
             wprintw(sw[4], "%s:%s ",localInfo(rightPassive),socketInfo(rightSd));
-        else if (rightSd > 0)
+        else
             wprintw(sw[4], "%s:%s ",localInfo(rightSd),socketInfo(rightSd));
-        else 
-            waddstr(sw[4], "*:*:*:* ");
         if(rightSd > 0) {
             waddstr(sw[4], "CONNECTED");
         } else if (rightPassive > 0) {
@@ -478,10 +450,8 @@ void proccessCmd(char cmd[]) {
     } else if (strcmp(cmd, "lft") == 0) {
         if (leftPassive > 0)
             wprintw(sw[4], "%s:%s ",socketInfo(leftSd), localInfo(leftPassive));
-        else if (leftSd > 0)
-            wprintw(sw[4], "%s:%s: ",socketInfo(leftSd), localInfo(leftSd));
         else
-            waddstr(sw[4], "*:*:*:* ");
+            wprintw(sw[4], "%s:%s: ",socketInfo(leftSd), localInfo(leftSd));
         if(leftSd > 0) {
             waddstr(sw[4], "CONNECTED");
         } else if (leftPassive > 0) {
@@ -677,15 +647,17 @@ void createConnection() {
         FD_SET(leftPassive, & rfds);
     }
     
+    //runs src if there are no passive connections
+    if (src[0] != '\0' && leftPassive <= 0 && rightPassive <= 0) {
+            readCmdFile(src);
+    }
+    
     /* accept and handle requests */
     while (1) {
         FD_SET(STDIN_FILENO, & rfds);
-        if (src[0] != '\0' && leftPassive != -1) {
-            readCmdFile(src);
-        }
         while (1) {
             loopRfds = rfds;
-            retval = select(max(rightSd, max(rightSd, max(leftPassive, leftSd))) + 1, & loopRfds, NULL, NULL, NULL);
+            retval = select(max(rightSd, max(rightPassive, max(rightSd, max(leftPassive, leftSd)))) + 1, & loopRfds, NULL, NULL, NULL);
             //select error
             if (retval == -1) {
                 wprintw(sw[6], "\r\nError: Select error");
@@ -693,8 +665,22 @@ void createConnection() {
             //stnd input
             } else if (FD_ISSET(STDIN_FILENO, & loopRfds)) {
                 readInput(wgetch(sw[4]));
-            //passive connection
-            } else if (FD_ISSET(leftPassive, & loopRfds)) {
+            //rightPassive
+            } else if(rightPassive > -1 && FD_ISSET(rightPassive, & loopRfds)) {
+                alen = sizeof(cad);
+                if ((rightSd = accept(rightPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
+                    fprintf(stderr, "Error: Accept failed\n");
+                    nocbreak();
+                    endwin();
+                    exit(EXIT_FAILURE);
+                }
+                //connects to server
+                FD_SET(rightSd, & rfds);
+                if (src[0] != '\0') {
+                    readCmdFile(src);
+                }
+            //leftPassive
+            } else if (leftPassive > -1 && FD_ISSET(leftPassive, & loopRfds)) {
                 alen = sizeof(cad);
                 if ((leftSd = accept(leftPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
                     fprintf(stderr, "Error: Accept failed\n");
@@ -704,24 +690,31 @@ void createConnection() {
                 }
                 //connects to server
                 FD_SET(leftSd, & rfds);
-
                 if (src[0] != '\0') {
                     readCmdFile(src);
                 }
             //rightSd
             } else if (rightSd > -1 && FD_ISSET(rightSd, & loopRfds)) {
                 if ((n = recv(rightSd, buf, sizeof(buf), 0)) == 0) {
-                    closesocket(rightSd);
-                    FD_CLR(rightSd, & rfds);
-                    rightSd = -1;
-                    //reconects if persistant
-                    if (prsr) {
-                        rightSd = clientSocket(rport, raddr);
-                        FD_SET(rightSd, & rfds);
-                    } else {
-                        //nocbreak();
-                        //endwin();
-                        //exit(EXIT_FAILURE);
+                    if(rightPassive > 0) {
+                        closesocket(rightPassive);
+                        closesocket(rightSd);
+                        FD_CLR(rightPassive, & rfds);
+                        FD_CLR(rightSd, & rfds);
+                        rightPassive = -1;
+                        rightSd = -1;
+                        if (prsr) {
+                            rightPassive = serverSocket(rport);
+                            FD_SET(rightPassive, &rfds);
+                        }
+                    } else if (rightSd > 0) {
+                        closesocket(rightSd);
+                        FD_CLR(rightSd, & rfds);
+                        rightSd = -1;
+                        if (prsr) {
+                            rightSd = clientSocket(rport, raddr);
+                            FD_SET(rightSd, & rfds);
+                        }
                     }
                 } else {
                     waddch(sw[2], buf[0]);
@@ -740,24 +733,27 @@ void createConnection() {
             //leftSd
             } else if (leftSd > -1 && FD_ISSET(leftSd, & loopRfds)) {
                 if ((n = recv(leftSd, buf, sizeof(buf), 0)) == 0) {
-                    closesocket(leftSd);
-                    FD_CLR(leftSd, & rfds);
-                    leftSd = -1;
-                    //reconects if persistant
-                    if (prsl) {
-                        alen = sizeof(cad);
-                        if ((leftSd = accept(leftPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
-                            fprintf(stderr, "Error: Accept failed\n");
-                            nocbreak();
-                            endwin();
-                            exit(EXIT_FAILURE);
+                    if(leftPassive > 0) {
+                        closesocket(leftPassive);
+                        closesocket(leftSd);
+                        FD_CLR(leftPassive, & rfds);
+                        FD_CLR(leftSd, & rfds);
+                        leftPassive = -1;
+                        leftSd = -1;
+                        if (prsr) {
+                            leftPassive = serverSocket(lport);
+                            FD_SET(leftPassive, &rfds);
                         }
-                        FD_SET(leftSd, & rfds);
-                    } else {
-                        //nocbreak();
-                        //endwin();
-                        //exit(EXIT_FAILURE);
+                    } else if (leftSd > 0) {
+                        closesocket(leftSd);
+                        FD_CLR(leftSd, & rfds);
+                        leftSd = -1;
+                        if (prsl) {
+                            leftSd = clientSocket(lport, raddr); //raddr is temp
+                            FD_SET(leftSd, &rfds);
+                        }
                     }
+                    
                 } else {
                     waddch(sw[0], buf[0]);
                     updateWin(0);
