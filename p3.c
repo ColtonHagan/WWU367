@@ -80,6 +80,32 @@ void updateAll() {
     for (int i=0;i<NUMWINS;i++) updateWin(i);
 }
 
+/* Returns a str in the form my_IP:my_port */
+char *my_info(int sock,int port) {
+	struct sockaddr_in myaddr;
+	socklen_t my_addr_len = sizeof(myaddr);
+	char straddr[INET_ADDRSTRLEN];
+	char myport_str[6];
+	char *local_info = malloc(100);
+	char localhost[32];
+	if (sock != -1) {
+		gethostname(localhost,sizeof(localhost));
+		struct hostent *h_hostent = gethostbyname(localhost);
+		inet_ntop(AF_INET,h_hostent->h_addr_list[0],straddr,sizeof(straddr));
+		strcat(local_info,straddr);
+		
+		if (port > 0) {
+			sprintf(myport_str,"%d",port);
+        }
+		sprintf(myport_str,"*"); 
+        strcat(local_info,":");
+        strcat(local_info,myport_str);
+		return local_info;
+	} else {
+		return "*:*";
+    }
+}
+
 void createWindows() {
     char response[RES_BUF_SIZE];
       int WPOS[NUMWINS][4]= { {16,66,0,0},{16,66,0,66},{16,66,16,0},{16,66,16,66},
@@ -357,11 +383,14 @@ void proccessCmd(char cmd[]) {
         }
         //show connection STDIN_FILENO
     } else if (strcmp(cmd, "rght") == 0) {
-        if(strcmp(rightStatus,"DISCONNECTED") == 0)
+        /*if(strcmp(rightStatus,"DISCONNECTED") == 0)
             wprintw(sw[4],"%s:%s:*:* ",localIP, localPort); 
         else    
             wprintw(sw[4],"%s:%s:%s:%s ", localIP, localPort, rightIP, rightPort);
         wprintw(sw[4],"%s", rightStatus);
+        cmdFull = true;
+        updateWin(4);*/
+        wprintw(sw[4], "%s", my_info(rightSd,rport));
         cmdFull = true;
         updateWin(4);
     } else if (strcmp(cmd, "lft") == 0) {
@@ -585,6 +614,10 @@ void createConnection() {
                         rightSd = clientSocket(rport, raddr);
                         FD_SET(rightSd, & rfds);
                         strcpy(rightStatus, "CONNECTED");
+                    } else {
+                        //nocbreak();
+                        //endwin();
+                        //exit(EXIT_FAILURE);
                     }
                 } else {
                     waddch(sw[2],buf[0]);
@@ -656,6 +689,10 @@ void createConnection() {
                             }
                             FD_SET(leftSd,& rfds);
                             strcpy(leftStatus, "CONNECTED");
+                        } else {
+                            //nocbreak();
+                            //endwin();
+                            //exit(EXIT_FAILURE);
                         }
                     } else {
                         waddch(sw[0], buf[0]);
@@ -731,6 +768,10 @@ void createConnection() {
                             rightSd = clientSocket(rport, raddr);
                             FD_SET(rightSd, & rfds);
                             strcpy(rightStatus, "CONNECTED");
+                        } else {
+                            //nocbreak();
+                            //endwin();
+                            //exit(EXIT_FAILURE);
                         }
                     } else {
                         waddch(sw[2],buf[0]);
@@ -762,6 +803,10 @@ void createConnection() {
                             }
                             FD_SET(sd2,& rfds);
                             strcpy(leftStatus, "CONNECTED");
+                        } else {
+                            //nocbreak();
+                            //endwin();
+                            //exit(EXIT_FAILURE);
                         }
                     } else {
                         waddch(sw[0], buf[0]);
