@@ -62,8 +62,10 @@ int leftPassive, rightPassive, leftSd, rightSd = -1; //left/right sd, -1 if does
 fd_set rfds; //select set
 struct sockaddr_in cad; /* structure to hold client's address */
 char raddr[1000] = ""; //rraddr
+char laddr[1000] = ""; //rraddr
 int lport = PROTOPORT; //llport
 int rport = PROTOPORT; //rrport
+int bindLeft, bindRight = -1;
 
 //For reading input
 int cmdLen; //length of commad
@@ -80,7 +82,7 @@ void updateAll() {
     for (int i = 0; i < NUMWINS; i++) updateWin(i);
 }
 
-char *localInfo(int socket) {
+char *localInfo(int socket, bool left) {
     char portString[100];
     char* localInfoOut = malloc(100);
     
@@ -99,11 +101,14 @@ char *localInfo(int socket) {
         if(port > 0) {
             snprintf(portString, 100, "%d", port);
             strcat(localInfoOut,portString);
-        } else {
-            strcat(localInfoOut,"*");
         }
     } else {
-        strcat(localInfoOut,"*");
+        if(left) {
+            snprintf(portString, 100, "%d", bindLeft);
+        } else {
+            snprintf(portString, 100, "%d", bindRight);
+        }
+        strcat(localInfoOut,portString);
     }
     
     return localInfoOut;
@@ -222,8 +227,20 @@ void createWindows() {
     updateWin(4);
 }
 
+/* Bind a local port to the socket */
+void bindSocket(int socket, int port) { //temp???
+    struct sockaddr_in sad;
+    memset((char * ) & sad, 0, sizeof(sad)); /* clear sockaddr structure */
+    sad.sin_family = AF_INET;
+    sad.sin_port = htons((u_short) port);
+    
+    if (bind(socket, (struct sockaddr * ) &sad, sizeof(sad)) < 0) {
+        fprintf(stderr, "Error: Bind failed\n");
+        exit(EXIT_FAILURE);
+    }
+}
 // Makes and returns socket for client (which sends information) from given port and host
-int clientSocket(int port, char * host) {
+int clientSocket(int port, int bindPort, char * host) {
     int sd; /* socket descriptor */
     struct hostent * ptrh; /* pointer to a host table entry */
     struct protoent * ptrp; /* pointer to a protocol table entry */
@@ -249,6 +266,10 @@ int clientSocket(int port, char * host) {
         fprintf(stderr, "Error: Socket creation failed\n");
         exit(EXIT_FAILURE);
     }
+    
+    if(bindSocket > 0) {
+        bindSocket(sd,bindPort);
+    }
     /* Connect the socket to the specified server. */
     while (1) {
         if (connect(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
@@ -266,7 +287,7 @@ int clientSocket(int port, char * host) {
 }
 
 // Makes and returns socket for server (which recieves information) from given port
-int serverSocket(int port) {
+int serverSocket(int port, int bindPort) {
     int sd; /* socket descriptor */
     struct hostent * ptrh; /* pointer to a host table entry */
     struct protoent * ptrp; /* pointer to a protocol table entry */
@@ -292,11 +313,13 @@ int serverSocket(int port) {
         fprintf(stderr, "Error: Set sock opt failed\n");
         exit(1);
     }
-    /* Bind a local address to the socket */
-    if (bind(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
-        fprintf(stderr, "Error: Bind failed\n");
-        exit(EXIT_FAILURE);
-    }
+    
+    if(bindPort > 0) {
+        bindSocket(sd,bindPort);
+    } /*else {
+        bindSocket(sd,port);
+    }*/
+    
     /* Specify size of request queue */
     if (listen(sd, QLEN) < 0) {
         fprintf(stderr, "Error: Listen failed\n");
@@ -305,16 +328,49 @@ int serverSocket(int port) {
     return sd;
 }
 
-//Gets optional command from given cmd
-char * getOptCmd(char * cmd, char * baseCmd) {
-    char * optCmd = strtok(cmd, " =");
-    while (optCmd != NULL) {
-        if (strcmp(optCmd, baseCmd) != 0) {
-            return optCmd;
-        }
-        optCmd = strtok(NULL, " =");
+void insertData(char currentCh) {
+    waddch(sw[5], currentCh);
+    if ((strcmp(outputDir, "left") == 0) && (leftSd != -1)) {
+        waddch(sw[3], currentCh);
+        send(leftSd, & currentCh, 1, 0);
+        updateWin(3);
+    } else if ((strcmp(outputDir, "right") == 0) && (rightSd != -1)) {
+            waddch(sw[1], currentCh);
+            send(rightSd, & currentCh, 1, 0);
+            updateWin(1);
     }
-    return NULL;
+    updateWin(5);
+}
+
+char* split(char cmd[], int index) {
+    int i = 0;
+    char *p = strtok (cmd, " ");
+    char *array[100];
+    for(int j; j < 100; j++) {
+        array[j] = malloc(100);
+    }
+    while (p != NULL){
+        array[i++] = p;
+        p = strtok (NULL, " ");
+    }
+    if(index >= i) {
+        return NULL;
+    } 
+    return array[index];
+}
+
+void readInsertFile(char* fileName) {
+    FILE *fp = fopen(fileName, "r");
+    int c;
+    if(fp == NULL) {
+        wprintw(sw[6],"\r\nFile %s does not exist", fileName);
+        updateWin(6);
+    } else {
+        while((c = fgetc(fp)) != EOF) {
+            insertData(c);
+        }
+    }
+    updateWin(5);
 }
 
 void readCmdFile(char filename[]) {
@@ -351,12 +407,37 @@ void proccessCmd(char cmd[]) {
     } else if (strcmp(cmd, "src") == 0) {
         readCmdFile("scriptin");
     } else if (strstr(cmd, "src")) {
-        char * optCdm = getOptCmd(cmd, "src");
+        char * optCdm = split(cmd, 1);
         //incase you have src with extra spaces/enters
         if (optCdm != NULL) {
             readCmdFile(optCdm);
         }
-        //output cmds
+    } else if (strstr(cmd, "read")) {
+        char* fileName = split(cmd, 1);
+        if(fileName != NULL) {
+            werase(sw[5]);
+            readInsertFile(fileName);
+            updateWin(4);
+        } else {
+            waddstr(sw[6], "Error: Read command must include file to read");
+            updateWin(6);
+        }
+    //binding of ports
+    } else if (strstr(cmd, "llport")) {
+        char* port = split(cmd, 1);
+        if(port != NULL) {
+            bindLeft = atoi(port); //temp need to add check to see if value is possible -- maybe do in bind?
+        } else {
+            bindLeft = PROTOPORT;
+        }
+    } else if (strstr(cmd, "rlport")) {
+        char* port = split(cmd, 1);
+        if(port != NULL) {
+            bindRight = atoi(port);
+        } else {
+            bindRight = PROTOPORT;
+        }
+    //output cmds
     } else if (strcmp(cmd, "outl") == 0) {
         if (strcmp(type, "tail") == 0 || strcmp(type, "middle") == 0)
             strcpy(outputDir, "left");
@@ -393,7 +474,7 @@ void proccessCmd(char cmd[]) {
             rightPassive = -1;
             rightSd = -1;
             if (prsr) {
-                rightPassive = serverSocket(rport);
+                rightPassive = serverSocket(rport, bindRight);
                 FD_SET(rightPassive, &rfds);
             }
         } else if (rightSd > 0) {
@@ -401,7 +482,7 @@ void proccessCmd(char cmd[]) {
             FD_CLR(rightSd, & rfds);
             rightSd = -1;
             if (prsr) {
-                rightSd = clientSocket(rport, raddr);
+                rightSd = clientSocket(rport, bindRight, raddr);
                 FD_SET(rightSd, & rfds);
             }
         } else {
@@ -417,7 +498,7 @@ void proccessCmd(char cmd[]) {
             leftPassive = -1;
             leftSd = -1;
             if (prsl) {
-                leftPassive = serverSocket(lport);
+                leftPassive = serverSocket(lport, bindLeft);
                 FD_SET(leftPassive, &rfds);
             }
         } else if (leftSd > 0) {
@@ -425,7 +506,7 @@ void proccessCmd(char cmd[]) {
             FD_CLR(leftSd, & rfds);
             leftSd = -1;
             if (prsl) {
-                leftSd = clientSocket(lport, raddr); //raddr is temp
+                leftSd = clientSocket(lport, bindLeft, laddr);
                 FD_SET(leftSd, &rfds);
             }
         } else {
@@ -435,9 +516,9 @@ void proccessCmd(char cmd[]) {
         //show connection STDIN_FILENO
     } else if (strcmp(cmd, "rght") == 0) {
         if(rightPassive > 0)
-            wprintw(sw[4], "%s:%s ",localInfo(rightPassive),socketInfo(rightSd));
+            wprintw(sw[4], "%s:%s ",localInfo(rightPassive,false),socketInfo(rightSd));
         else
-            wprintw(sw[4], "%s:%s ",localInfo(rightSd),socketInfo(rightSd));
+            wprintw(sw[4], "%s:%s ",localInfo(rightSd,false),socketInfo(rightSd));
         if(rightSd > 0) {
             waddstr(sw[4], "CONNECTED");
         } else if (rightPassive > 0) {
@@ -449,9 +530,9 @@ void proccessCmd(char cmd[]) {
         updateWin(4);
     } else if (strcmp(cmd, "lft") == 0) {
         if (leftPassive > 0)
-            wprintw(sw[4], "%s:%s ",socketInfo(leftSd), localInfo(leftPassive));
+            wprintw(sw[4], "%s:%s ",socketInfo(leftSd), localInfo(leftPassive,true));
         else
-            wprintw(sw[4], "%s:%s: ",socketInfo(leftSd), localInfo(leftSd));
+            wprintw(sw[4], "%s:%s ",socketInfo(leftSd), localInfo(leftSd,true));
         if(leftSd > 0) {
             waddstr(sw[4], "CONNECTED");
         } else if (leftPassive > 0) {
@@ -554,17 +635,7 @@ void readInput(int currentCh) {
             wmove(sw[4], 0, 0);
             updateWin(4);
         } else {
-            waddch(sw[5], currentCh);
-            if ((strcmp(outputDir, "left") == 0) && (leftSd != -1)) {
-                waddch(sw[3], currentCh);
-                send(leftSd, & currentCh, 1, 0);
-                updateWin(3);
-            } else if ((strcmp(outputDir, "right") == 0) && (rightSd != -1)) {
-                waddch(sw[1], currentCh);
-                send(rightSd, & currentCh, 1, 0);
-                updateWin(1);
-            }
-            updateWin(5);
+            insertData(currentCh);
         }
         // command mode
     } else {
@@ -639,11 +710,11 @@ void createConnection() {
     FD_ZERO(&rfds);
     
     if((strcmp(type,"head") == 0 ) || (strcmp(type,"middle") == 0 )) {
-        rightSd = clientSocket(rport, raddr);
+        rightSd = clientSocket(rport, bindRight, raddr);
         FD_SET(rightSd, & rfds);
     }
     if((strcmp(type,"tail") == 0 ) || (strcmp(type,"middle") == 0 )) {
-        leftPassive = serverSocket(lport);
+        leftPassive = serverSocket(lport, bindLeft);
         FD_SET(leftPassive, & rfds);
     }
     
@@ -704,7 +775,7 @@ void createConnection() {
                         rightPassive = -1;
                         rightSd = -1;
                         if (prsr) {
-                            rightPassive = serverSocket(rport);
+                            rightPassive = serverSocket(rport, bindRight);
                             FD_SET(rightPassive, &rfds);
                         }
                     } else if (rightSd > 0) {
@@ -712,7 +783,7 @@ void createConnection() {
                         FD_CLR(rightSd, & rfds);
                         rightSd = -1;
                         if (prsr) {
-                            rightSd = clientSocket(rport, raddr);
+                            rightSd = clientSocket(rport, bindRight, raddr);
                             FD_SET(rightSd, & rfds);
                         }
                     }
@@ -741,7 +812,7 @@ void createConnection() {
                         leftPassive = -1;
                         leftSd = -1;
                         if (prsr) {
-                            leftPassive = serverSocket(lport);
+                            leftPassive = serverSocket(lport, bindLeft);
                             FD_SET(leftPassive, &rfds);
                         }
                     } else if (leftSd > 0) {
@@ -749,7 +820,7 @@ void createConnection() {
                         FD_CLR(leftSd, & rfds);
                         leftSd = -1;
                         if (prsl) {
-                            leftSd = clientSocket(lport, raddr); //raddr is temp
+                            leftSd = clientSocket(lport, bindLeft, laddr);
                             FD_SET(leftSd, &rfds);
                         }
                     }
@@ -832,6 +903,12 @@ int main(int argc, char * argv[]) {
             7
         },
         {
+            "rlport",
+            required_argument,
+            NULL,
+            8
+        },
+        {
             "lpr",
             no_argument,
             NULL,
@@ -878,17 +955,15 @@ int main(int argc, char * argv[]) {
             break;
         case 3:
             rport = atoi(optarg);
-            //strcpy(rightPort, optarg);
             if (rport < 1 || rport > 65535) {
-                printf("Error: rrport address out of range %d\n", rport);
+                printf("Error: rrport port out of range %d\n", rport);
                 exit(EXIT_FAILURE);
             }
             break;
         case 4:
             lport = atoi(optarg);
-            //strcpy(leftPort, optarg);
             if (lport < 1 || lport > 65535) {
-                printf("Error: llport address out of range %d\n", lport);
+                printf("Error: llport port out of range %d\n", lport);
                 exit(EXIT_FAILURE);
             }
             break;
@@ -904,6 +979,12 @@ int main(int argc, char * argv[]) {
         case 7:
             prsr = true;
             break;
+        case 8:
+            bindRight = atoi(optarg);
+            if (bindRight < 1 || bindRight > 65535) {
+                printf("Error: rlport port out of range %d\n", bindRight);
+                exit(EXIT_FAILURE);
+            }
         case 10:
             lpr = true;
             break;
@@ -933,5 +1014,8 @@ int main(int argc, char * argv[]) {
     if (raddr[0] == '\0') {
         strcpy(raddr, "localhost");
     }
+    
+    bindLeft = lport;
+    strcpy(laddr, "localhost");
     createConnection();
 }
