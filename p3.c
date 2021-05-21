@@ -426,9 +426,14 @@ void proccessCmd(char cmd[]) {
     } else if (strstr(cmd, "llport")) {
         char* port = split(cmd, 1);
         if(port != NULL) {
-            bindLeft = atoi(port); //temp need to add check to see if value is possible -- maybe do in bind?
+            bindLeft = atoi(port);
         } else {
             bindLeft = PROTOPORT;
+        }
+        if(leftPassive > 0) {
+            bindSocket(leftPassive,bindLeft);
+        } else if (leftSd > 0) {
+            bindSocket(leftSd,bindLeft);
         }
     } else if (strstr(cmd, "rlport")) {
         char* port = split(cmd, 1);
@@ -436,6 +441,11 @@ void proccessCmd(char cmd[]) {
             bindRight = atoi(port);
         } else {
             bindRight = PROTOPORT;
+        }
+        if(rightPassive > 0) {
+            bindSocket(rightPassive, bindRight);
+        } else if (rightSd > 0) {
+            bindSocket(rightSd, bindRight);
         }
     //output cmds
     } else if (strcmp(cmd, "outl") == 0) {
@@ -693,10 +703,19 @@ void readInput(int currentCh) {
 int max(int x, int y) {
     return (x > y) ? x : y;
 }
+
+int acceptConnection(int passiveSd) {
+    int acceptSd = -1;
+    int alen = sizeof(cad);
+    if ((acceptSd = accept(passiveSd, (struct sockaddr * ) & cad, & alen)) < 0) {
+        waddstr(sw[6],"\r\nError: Accept failed");
+        updateWin(6);
+    }
+    return acceptSd;
+}
 // Creates "head", "tail", or "middle" connection based on given type, attaches to given port and address if needed/asked to
 void createConnection() {
     int n; /* number of characters read */
-    int alen; /* length of address */
     char buf[1000]; /* buffer for string the server sends */
     fd_set loopRfds = rfds; //allows to drop
     int retval;
@@ -722,7 +741,6 @@ void createConnection() {
     if (src[0] != '\0' && leftPassive <= 0 && rightPassive <= 0) {
             readCmdFile(src);
     }
-    
     /* accept and handle requests */
     while (1) {
         FD_SET(STDIN_FILENO, & rfds);
@@ -738,32 +756,14 @@ void createConnection() {
                 readInput(wgetch(sw[4]));
             //rightPassive
             } else if(rightPassive > -1 && FD_ISSET(rightPassive, & loopRfds)) {
-                alen = sizeof(cad);
-                if ((rightSd = accept(rightPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
-                    fprintf(stderr, "Error: Accept failed\n");
-                    nocbreak();
-                    endwin();
-                    exit(EXIT_FAILURE);
-                }
-                //connects to server
-                FD_SET(rightSd, & rfds);
-                if (src[0] != '\0') {
-                    readCmdFile(src);
-                }
+                rightSd = acceptConnection(rightPassive);
+                if(rightSd > 0)
+                    FD_SET(rightSd, & rfds);
             //leftPassive
             } else if (leftPassive > -1 && FD_ISSET(leftPassive, & loopRfds)) {
-                alen = sizeof(cad);
-                if ((leftSd = accept(leftPassive, (struct sockaddr * ) & cad, & alen)) < 0) {
-                    fprintf(stderr, "Error: Accept failed\n");
-                    nocbreak();
-                    endwin();
-                    exit(EXIT_FAILURE);
-                }
-                //connects to server
-                FD_SET(leftSd, & rfds);
-                if (src[0] != '\0') {
-                    readCmdFile(src);
-                }
+                leftSd = acceptConnection(leftPassive);
+                if(leftSd > 0)
+                    FD_SET(leftSd, & rfds);
             //rightSd
             } else if (rightSd > -1 && FD_ISSET(rightSd, & loopRfds)) {
                 if ((n = recv(rightSd, buf, sizeof(buf), 0)) == 0) {
@@ -1019,3 +1019,4 @@ int main(int argc, char * argv[]) {
     strcpy(laddr, "localhost");
     createConnection();
 }
+
