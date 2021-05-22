@@ -65,6 +65,7 @@ char raddr[1000] = ""; //rraddr
 char laddr[1000] = ""; //rraddr
 int lport = PROTOPORT; //llport
 int rport = PROTOPORT; //rrport
+int lrport = -1;
 int bindLeft, bindRight = -1;
 
 //For reading input
@@ -228,7 +229,7 @@ void createWindows() {
 }
 
 /* Bind a local port to the socket */
-void bindSocket(int socket, int port) { //temp???
+void bindSocket(int socket, int port) {
     struct sockaddr_in sad;
     memset((char * ) & sad, 0, sizeof(sad)); /* clear sockaddr structure */
     sad.sin_family = AF_INET;
@@ -316,9 +317,9 @@ int serverSocket(int port, int bindPort) {
     
     if(bindPort > 0) {
         bindSocket(sd,bindPort);
-    } /*else {
+    } else {
         bindSocket(sd,port);
-    }*/
+    }
     
     /* Specify size of request queue */
     if (listen(sd, QLEN) < 0) {
@@ -446,6 +447,31 @@ void proccessCmd(char cmd[]) {
             bindSocket(rightPassive, bindRight);
         } else if (rightSd > 0) {
             bindSocket(rightSd, bindRight);
+        }
+    //Accept ports
+    } else if (strstr(cmd, "lrport")) {
+        char* port = split(cmd, 1);
+        if(port != NULL) {
+            lrport = atoi(port);
+        } else {
+           lrport = PROTOPORT;
+        }
+    //Set IP
+    } else if (strstr(cmd, "lraddr")) {
+        char* addr = split(cmd, 1);
+        if(addr != NULL) {
+            strcpy(laddr, addr);
+        } else {
+            waddstr(sw[6], "\r\nError: lraddr requires an IP Address");
+            updateWin(6);
+        }
+    } else if (strstr(cmd, "rraddr")) {
+        char* addr = split(cmd, 1);
+        if(addr != NULL) {
+            strcpy(raddr, addr);
+        } else {
+            waddstr(sw[6], "\r\nError: rraddr requires an IP Address");
+            updateWin(6);
         }
     //output cmds
     } else if (strcmp(cmd, "outl") == 0) {
@@ -704,13 +730,50 @@ int max(int x, int y) {
     return (x > y) ? x : y;
 }
 
-int acceptConnection(int passiveSd) {
+int acceptConnection(int passiveSd, char* ip, int port) {
+    
+    char addrStr[INET_ADDRSTRLEN];
+    char strAddr[INET_ADDRSTRLEN];
+    struct hostent *host = NULL;
+	//struct sockaddr_in cad;
     int acceptSd = -1;
     int alen = sizeof(cad);
-    if ((acceptSd = accept(passiveSd, (struct sockaddr * ) & cad, & alen)) < 0) {
-        waddstr(sw[6],"\r\nError: Accept failed");
+    if ((acceptSd = accept(passiveSd, (struct sockaddr * ) &cad, &alen)) < 0) {
+        waddstr(sw[6],"\r\nError: Accept attempt failed");
         updateWin(6);
     }
+    //checks given Ip valid & requested
+    if (ip != NULL && (strcmp(ip,"localhost") != 0)){
+		host = gethostbyname(ip);
+		inet_ntop(AF_INET,host->h_addr_list[0],addrStr,sizeof(addrStr));
+		if (host == NULL) {
+			wprintw(sw[6],"\r\nError: Requested IP is not valid");
+			updateWin(6);
+			closesocket(acceptSd);
+			return -1;
+        }
+	}
+	
+    //checks Ip matchs
+    if (host != NULL) {
+		if (strcmp(addrStr, inet_ntop(AF_INET, &cad.sin_addr,strAddr, sizeof(strAddr))) != 0){
+			waddstr(sw[6],"\r\nError: Accept and requested IP do not patch");
+			updateWin(6);
+			closesocket(acceptSd);
+			return -1;	
+		}
+	}
+    
+    //checks port matchs
+    if (port > 0){
+		if (port != ntohs(cad.sin_port)){
+			waddstr(sw[6],"\r\nError: Accept and requested ports do not match");
+			updateWin(6);
+			closesocket(acceptSd);
+			return -1;	
+		}	
+	}
+    
     return acceptSd;
 }
 // Creates "head", "tail", or "middle" connection based on given type, attaches to given port and address if needed/asked to
@@ -718,7 +781,8 @@ void createConnection() {
     int n; /* number of characters read */
     char buf[1000]; /* buffer for string the server sends */
     fd_set loopRfds = rfds; //allows to drop
-    int retval;
+    int retval; //select return
+    //for windows
     #ifdef WIN32
     WSADATA wsaData;
     WSAStartup(0x0101, & wsaData);
@@ -756,12 +820,12 @@ void createConnection() {
                 readInput(wgetch(sw[4]));
             //rightPassive
             } else if(rightPassive > -1 && FD_ISSET(rightPassive, & loopRfds)) {
-                rightSd = acceptConnection(rightPassive);
+                rightSd = acceptConnection(rightPassive,raddr,-1); // temp?? No current way to set
                 if(rightSd > 0)
                     FD_SET(rightSd, & rfds);
             //leftPassive
             } else if (leftPassive > -1 && FD_ISSET(leftPassive, & loopRfds)) {
-                leftSd = acceptConnection(leftPassive);
+                leftSd = acceptConnection(leftPassive,laddr,lrport);
                 if(leftSd > 0)
                     FD_SET(leftSd, & rfds);
             //rightSd
@@ -824,7 +888,6 @@ void createConnection() {
                             FD_SET(leftSd, &rfds);
                         }
                     }
-                    
                 } else {
                     waddch(sw[0], buf[0]);
                     updateWin(0);
@@ -841,11 +904,11 @@ void createConnection() {
                 }
             }
         }
-        /* Closes and exits */
-        closesocket(leftSd);
     }
     /* Closes and exits */
     closesocket(leftPassive);
+    closesocket(rightPassive);
+    closesocket(leftSd);
     closesocket(rightSd);
     nocbreak();
     endwin();
@@ -985,6 +1048,7 @@ int main(int argc, char * argv[]) {
                 printf("Error: rlport port out of range %d\n", bindRight);
                 exit(EXIT_FAILURE);
             }
+            break;
         case 10:
             lpr = true;
             break;
