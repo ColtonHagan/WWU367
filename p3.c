@@ -252,20 +252,20 @@ int clientSocket(int port, int bindingPort, char * host) {
     /* Convert host name to equivalent IP address and copy to sad. */
     ptrh = gethostbyname(host);
     if (((char * ) ptrh) == NULL) {
-        fprintf(stderr, "Error: invalid host: %s\n", host);
-        exit(EXIT_FAILURE);
+        wprintw(sw[4], "\r\nError: invalid host: %s", host);
+        updateWin(6);
     }
     memcpy(&sad.sin_addr, ptrh -> h_addr, ptrh -> h_length);
     /* Map TCP transport protocol name to protocol number. */
     if (((long int)(ptrp = getprotobyname("tcp"))) == 0) {
-        fprintf(stderr, "Error: Cannot map \"tcp\" to protocol number");
-        exit(EXIT_FAILURE);
+        waddstr(sw[6], "\r\nError: Cannot map \"tcp\" to protocol number");
+        updateWin(6);
     }
     /* Create a socket. */
     sd = socket(PF_INET, SOCK_STREAM, ptrp -> p_proto);
     if (sd < 0) {
-        fprintf(stderr, "Error: Socket creation failed\n");
-        exit(EXIT_FAILURE);
+        waddstr(sw[6], "\r\nError: Socket creation failed");
+        updateWin(6);
     }
     
     if(bindingPort > 0) {
@@ -275,15 +275,15 @@ int clientSocket(int port, int bindingPort, char * host) {
     while (1) {
         if (connect(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
             if (!prsr) {
-                fprintf(stderr, "Error: Failed to make connection to %s:%d\n", host, port);
-                nocbreak();
-                endwin();
-                exit(EXIT_FAILURE);
+                wprintw(sw[6], "\r\nError: Failed to make connection to %s:%d", host, port);
+                updateWin(6);
             }
         } else {
             break;
         }
     }
+    wprintw(sw[0],"||%d||",sd);
+    updateWin(0);
     return sd;
 }
 
@@ -300,19 +300,19 @@ int serverSocket(int port, int bindingPort) {
     /* Map TCP transport protocol name to protocol number */
     if (((long int)(ptrp = getprotobyname("tcp"))) == 0) {
         fprintf(stderr, "Error: Cannot map \"tcp\" to protocol number");
-        exit(EXIT_FAILURE);
+        //exit(EXIT_FAILURE);
     }
     /* Create a socket */
     sd = socket(PF_INET, SOCK_STREAM, ptrp -> p_proto);
     if (sd < 0) {
         fprintf(stderr, "Error: Socket creation failed\n");
-        exit(EXIT_FAILURE);
+        //exit(EXIT_FAILURE);
     }
     /*Eliminate "Address already in use" error message. */
     int flag = 1;
     if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, & flag, sizeof(int)) == -1) {
         fprintf(stderr, "Error: Set sock opt failed\n");
-        exit(1);
+        //exit(1);
     }
     if(bindingPort > 0) {
         bindSocket(sd,bindingPort);
@@ -323,7 +323,7 @@ int serverSocket(int port, int bindingPort) {
     /* Specify size of request queue */
     if (listen(sd, QLEN) < 0) {
         fprintf(stderr, "Error: Listen failed\n");
-        exit(EXIT_FAILURE);
+        //exit(EXIT_FAILURE);
     }
     return sd;
 }
@@ -862,17 +862,20 @@ void createConnection() {
     
     if((strcmp(type,"head") == 0 ) || (strcmp(type,"middle") == 0 )) {
         rightSd = clientSocket(rport, bindRight, raddr);
-        FD_SET(rightSd, &rfds);
+        if(rightSd > 0)
+            FD_SET(rightSd, &rfds);
+        //sleep(50000);
     }
     if((strcmp(type,"tail") == 0 ) || (strcmp(type,"middle") == 0 )) {
         leftPassive = serverSocket(lport, bindLeft);
-        FD_SET(leftPassive, &rfds);
+        if(leftPassive > 0)
+            FD_SET(leftPassive, &rfds);
     }
     
     //runs src if there are no passive connections
-    if (src[0] != '\0' && leftPassive <= 0 && rightPassive <= 0) {
+    /*if (src[0] != '\0' && leftPassive <= 0 && rightPassive <= 0) {
         readCmdFile(src);
-    }
+    }*/
     /* accept and handle requests */
     while (1) {
         FD_SET(STDIN_FILENO, & rfds);
@@ -980,7 +983,7 @@ void createConnection() {
     closesocket(rightSd);
     nocbreak();
     endwin();
-    exit(0);
+    //exit(0); temp
 }
 
 int main(int argc, char * argv[]) {
