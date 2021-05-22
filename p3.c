@@ -429,7 +429,7 @@ void proccessCmd(char cmd[]) {
         if(port != NULL) {
             bindLeft = atoi(port);
         } else {
-            bindLeft = PROTOPORT;
+            bindLeft = lport;
         }
         if(leftPassive > 0) {
             bindSocket(leftPassive,bindLeft);
@@ -441,12 +441,82 @@ void proccessCmd(char cmd[]) {
         if(port != NULL) {
             bindRight = atoi(port);
         } else {
-            bindRight = PROTOPORT;
+            bindRight = rport;
         }
         if(rightPassive > 0) {
             bindSocket(rightPassive, bindRight);
         } else if (rightSd > 0) {
             bindSocket(rightSd, bindRight);
+        }
+    //connection
+    } else if (strstr(cmd, "connectl")) {
+        if(leftPassive <= 0 && leftSd <= 0) {
+            char* addr = split(cmd, 1);
+            char* port = split(cmd, 2);
+            if(addr != NULL) {
+                if(port != NULL) {
+                    leftSd = clientSocket(atoi(port),bindLeft,addr); //maybe make ddr raddr
+                } else {
+                    leftSd = clientSocket(rport,bindLeft,addr);
+                }
+                if(leftSd > 0)
+                    FD_SET(leftSd, &rfds);
+            } else {
+                waddstr(sw[6], "\r\nError: connectl requires a IP Address");
+                updateWin(6); 
+            }
+        } else {
+            waddstr(sw[6], "\r\nError: Left socket already exists, drop and try again");
+            updateWin(6);
+        }
+    } else if (strstr(cmd, "connectr")) {
+        if(rightPassive <= 0 && rightSd <= 0) {
+            char* addr = split(cmd, 1);
+            char* port = split(cmd, 2);
+            if(addr != NULL) {
+                if(port != NULL) {
+                    rightSd = clientSocket(atoi(port),bindRight,addr); //maybe make addr raddr
+                } else {
+                    rightSd = clientSocket(rport,bindRight,addr);
+                }
+                if(rightSd > 0)
+                    FD_SET(rightSd, &rfds);
+            } else {
+                waddstr(sw[6], "\r\nError: connectr requires a IP Address");
+                updateWin(6);
+            }
+        } else {
+            waddstr(sw[6], "\r\nError: Right socket already exists, drop and try again");
+            updateWin(6);
+        }
+    //listen
+    } else if (strstr(cmd, "lstnl")) {
+        if(leftPassive <= 0 && leftSd <= 0) {
+            char* port = split(cmd, 1);
+            if(port != NULL) {
+                leftPassive = serverSocket(atoi(port),bindLeft);
+            } else {
+                leftPassive = serverSocket(lport,bindLeft);
+            }
+            if(leftPassive > 0)
+                FD_SET(leftPassive, &rfds);
+        } else {
+            waddstr(sw[6], "\r\nError: Left socket already exists, drop and try again");
+            updateWin(6);
+        }
+    } else if (strstr(cmd, "lstnr")) {
+        if(rightPassive <= 0 && rightSd <= 0) {
+            char* port = split(cmd, 1);
+            if(port != NULL) {
+                rightPassive = serverSocket(atoi(port),bindRight);
+            } else {
+                rightPassive = serverSocket(rport,bindRight);
+            }
+            if(rightPassive > 0)
+                FD_SET(rightPassive, &rfds);
+        } else {
+            waddstr(sw[6], "\r\nError: Right socket already exists, drop and try again");
+            updateWin(6);
         }
     //Accept ports
     } else if (strstr(cmd, "lrport")) {
@@ -454,7 +524,7 @@ void proccessCmd(char cmd[]) {
         if(port != NULL) {
             lrport = atoi(port);
         } else {
-           lrport = PROTOPORT;
+           lrport = rport;
         }
     //Set IP
     } else if (strstr(cmd, "lraddr")) {
@@ -803,7 +873,7 @@ void createConnection() {
     
     //runs src if there are no passive connections
     if (src[0] != '\0' && leftPassive <= 0 && rightPassive <= 0) {
-            readCmdFile(src);
+        readCmdFile(src);
     }
     /* accept and handle requests */
     while (1) {
