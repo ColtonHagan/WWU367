@@ -236,12 +236,12 @@ void bindSocket(int socket, int port) {
     sad.sin_port = htons((u_short) port);
     
     if (bind(socket, (struct sockaddr * ) &sad, sizeof(sad)) < 0) {
-        fprintf(stderr, "Error: Bind failed\n");
-        exit(EXIT_FAILURE);
+        wprintw(sw[6], "\r\nError: Bind failed");
+        updateWin(6);
     }
 }
 // Makes and returns socket for client (which sends information) from given port and host
-int clientSocket(int port, int bindPort, char * host) {
+int clientSocket(int port, int bindingPort, char * host) {
     int sd; /* socket descriptor */
     struct hostent * ptrh; /* pointer to a host table entry */
     struct protoent * ptrp; /* pointer to a protocol table entry */
@@ -255,7 +255,7 @@ int clientSocket(int port, int bindPort, char * host) {
         fprintf(stderr, "Error: invalid host: %s\n", host);
         exit(EXIT_FAILURE);
     }
-    memcpy( & sad.sin_addr, ptrh -> h_addr, ptrh -> h_length);
+    memcpy(&sad.sin_addr, ptrh -> h_addr, ptrh -> h_length);
     /* Map TCP transport protocol name to protocol number. */
     if (((long int)(ptrp = getprotobyname("tcp"))) == 0) {
         fprintf(stderr, "Error: Cannot map \"tcp\" to protocol number");
@@ -268,8 +268,8 @@ int clientSocket(int port, int bindPort, char * host) {
         exit(EXIT_FAILURE);
     }
     
-    if(bindSocket > 0) {
-        bindSocket(sd,bindPort);
+    if(bindingPort > 0) {
+        bindSocket(sd, bindingPort);
     }
     /* Connect the socket to the specified server. */
     while (1) {
@@ -288,7 +288,7 @@ int clientSocket(int port, int bindPort, char * host) {
 }
 
 // Makes and returns socket for server (which recieves information) from given port
-int serverSocket(int port, int bindPort) {
+int serverSocket(int port, int bindingPort) {
     int sd; /* socket descriptor */
     struct hostent * ptrh; /* pointer to a host table entry */
     struct protoent * ptrp; /* pointer to a protocol table entry */
@@ -314,9 +314,8 @@ int serverSocket(int port, int bindPort) {
         fprintf(stderr, "Error: Set sock opt failed\n");
         exit(1);
     }
-    
-    if(bindPort > 0) {
-        bindSocket(sd,bindPort);
+    if(bindingPort > 0) {
+        bindSocket(sd,bindingPort);
     } else {
         bindSocket(sd,port);
     }
@@ -420,7 +419,7 @@ void proccessCmd(char cmd[]) {
             readInsertFile(fileName);
             updateWin(4);
         } else {
-            waddstr(sw[6], "Error: Read command must include file to read");
+            waddstr(sw[6], "\r\nError: Read command must include file to read");
             updateWin(6);
         }
     //binding of ports
@@ -436,7 +435,7 @@ void proccessCmd(char cmd[]) {
         } else if (leftSd > 0) {
             bindSocket(leftSd,bindLeft);
         }
-    } else if (strstr(cmd, "rlport")) {
+    } else if (strstr(cmd, "rlport")) { //,-- Not working?
         char* port = split(cmd, 1);
         if(port != NULL) {
             bindRight = atoi(port);
@@ -469,7 +468,7 @@ void proccessCmd(char cmd[]) {
             waddstr(sw[6], "\r\nError: Left socket already exists, drop and try again");
             updateWin(6);
         }
-    } else if (strstr(cmd, "connectr")) {
+    } else if (strstr(cmd, "connectr")) { //currently connect breaks program TEMP
         if(rightPassive <= 0 && rightSd <= 0) {
             char* addr = split(cmd, 1);
             char* port = split(cmd, 2);
@@ -801,7 +800,6 @@ int max(int x, int y) {
 }
 
 int acceptConnection(int passiveSd, char* ip, int port) {
-    
     char addrStr[INET_ADDRSTRLEN];
     char strAddr[INET_ADDRSTRLEN];
     struct hostent *host = NULL;
@@ -864,11 +862,11 @@ void createConnection() {
     
     if((strcmp(type,"head") == 0 ) || (strcmp(type,"middle") == 0 )) {
         rightSd = clientSocket(rport, bindRight, raddr);
-        FD_SET(rightSd, & rfds);
+        FD_SET(rightSd, &rfds);
     }
     if((strcmp(type,"tail") == 0 ) || (strcmp(type,"middle") == 0 )) {
         leftPassive = serverSocket(lport, bindLeft);
-        FD_SET(leftPassive, & rfds);
+        FD_SET(leftPassive, &rfds);
     }
     
     //runs src if there are no passive connections
