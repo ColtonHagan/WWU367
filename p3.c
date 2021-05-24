@@ -1,8 +1,8 @@
 /*
 Name : Colton Hagan
-Date : 5/7/21
+Date : 5/23/21
 Class : CS367
-Program : Piggy2 program, networking program matching assignment description 
+Program : Piggy3 program, networking program matching assignment description 
 */
 #ifndef unix
 #define WIN32
@@ -43,6 +43,11 @@ WINDOW * sw[NUMWINS];
 
 //ncurses cmd helper
 bool cmdFull = true;
+bool inputFull = true;
+bool zeroFull = true;
+bool oneFull = true;
+bool twoFull = true;
+bool threeFull = true;
 //for up
 char prevCmd[10][20];
 int prevCmdNum = 0;
@@ -73,15 +78,56 @@ char cmd[100]; //command
 char prevCh; //prevous char
 bool insertMode = false; //if in insert mode
 
+//updates a Window
 void updateWin(int i) {
     touchwin(w[i]);
     wrefresh(sw[i]);
 }
 
+//Updates all windows
 void updateAll() {
     for (int i = 0; i < NUMWINS; i++) updateWin(i);
 }
 
+//Prints a char with formating
+void printChar(int win, short ch) {
+    if(win == 0 && zeroFull) {
+        werase(sw[0]);
+        zeroFull = false;
+        updateWin(0);
+    } else if (win == 1 && oneFull) {
+        werase(sw[1]);
+        oneFull = false;
+        updateWin(1);
+    } else if (win == 2 && twoFull) {
+        werase(sw[2]);
+        twoFull = false;
+        updateWin(2);
+    } else if (win == 3 && threeFull) {
+        werase(sw[3]);
+        threeFull = false;
+        updateWin(3);
+    }
+    if(ch == 10 || ch == 13) {
+        waddch(sw[win],ch);
+    } else if(ch > 127 || ch < 32) {
+        if(ch < 256)
+	        wprintw(sw[win],"0x%X",ch);
+    } else {
+        if(ch == 127)
+            waddstr(sw[win],"^H");
+        else
+            waddch(sw[win],ch);
+    }
+    updateWin(win);
+    if(insertMode) {
+        updateWin(5);
+    } else {
+        updateWin(4);
+    }
+}
+
+//gets local info about ports
 char *localInfo(int socket, bool left) {
     char portString[100];
     char* localInfoOut = malloc(100);
@@ -114,6 +160,7 @@ char *localInfo(int socket, bool left) {
     return localInfoOut;
 }
 
+//get info about a socket connection
 char *socketInfo(int socket) {
     char socketPort[100];
     char socketIp[INET_ADDRSTRLEN];
@@ -122,7 +169,6 @@ char *socketInfo(int socket) {
     if(socket > 0) {
         struct sockaddr_in sad;
 	    socklen_t sad_len = sizeof(sad);
-	    
         getpeername(socket,(struct sockaddr*)&sad,&sad_len);
 		inet_ntop(AF_INET, &sad.sin_addr,socketIp, sizeof(socketIp));	
 		sprintf(socketPort,"%d",ntohs(sad.sin_port));
@@ -134,6 +180,7 @@ char *socketInfo(int socket) {
     }
 }
 
+//creats ncurses winows
 void createWindows() {
     char response[RES_BUF_SIZE];
     int WPOS[NUMWINS][4] = {
@@ -214,6 +261,14 @@ void createWindows() {
         wrefresh(w[i]);
         wrefresh(sw[i]);
     }
+    wmove(sw[0],0,0);
+    wprintw(sw[0],"Data arriving from the left");
+    wmove(sw[1],0,0);
+    waddstr(sw[1],"Data leaving right side");
+    wmove(sw[2],0,0);
+    waddstr(sw[2],"Data leaving the left side");
+    wmove(sw[3],0,0);
+    waddstr(sw[3],"Data arriving from the right"); 
     wmove(sw[4], 0, 0);
     waddstr(sw[4], "Commands");
     wmove(sw[5], 0, 0);
@@ -241,8 +296,6 @@ void bindSocket(int socket, int port) {
 }
 // Makes and returns socket for client (which sends information) from given port and host
 int clientSocket(int port, int bindingPort, char * host) {
-    wprintw(sw[2], "||clientSocket addr = %s port = %d||", host, port);
-    updateWin(2);
             
     int sd; /* socket descriptor */
     struct hostent * ptrh; /* pointer to a host table entry */
@@ -271,8 +324,6 @@ int clientSocket(int port, int bindingPort, char * host) {
     }
     
     if(bindingPort > 0) {
-        wprintw(sw[2], "||Entering bindingPort||");
-        updateWin(2);
         bindSocket(sd, bindingPort);
     }
     /* Connect the socket to the specified server. */
@@ -302,20 +353,20 @@ int serverSocket(int port, int bindingPort) {
     sad.sin_port = htons((u_short) port);
     /* Map TCP transport protocol name to protocol number */
     if (((long int)(ptrp = getprotobyname("tcp"))) == 0) {
-        fprintf(stderr, "Error: Cannot map \"tcp\" to protocol number");
-        //exit(EXIT_FAILURE);
+        waddstr(sw[6], "\r\nError: Cannot map \"tcp\" to protocol number");
+        updateWin(6);
     }
     /* Create a socket */
     sd = socket(PF_INET, SOCK_STREAM, ptrp -> p_proto);
     if (sd < 0) {
-        fprintf(stderr, "Error: Socket creation failed\n");
-        //exit(EXIT_FAILURE);
+        waddstr(sw[6], "\r\nError: Socket creation failed");
+        updateWin(6);
     }
     /*Eliminate "Address already in use" error message. */
     int flag = 1;
     if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, & flag, sizeof(int)) == -1) {
-        fprintf(stderr, "Error: Set sock opt failed\n");
-        //exit(1);
+        waddstr(sw[6], "\r\nError: Set sock opt failed");
+        updateWin(6);
     }
     if(bindingPort > 0) {
         bindSocket(sd,bindingPort);
@@ -325,29 +376,27 @@ int serverSocket(int port, int bindingPort) {
     
     /* Specify size of request queue */
     if (listen(sd, QLEN) < 0) {
-        fprintf(stderr, "Error: Listen failed\n");
-        //exit(EXIT_FAILURE);
+        waddstr(sw[6], "Error: Listen failed\n");
+        updateWin(6);
     }
     return sd;
 }
 
+//Inserts data by sending and printing
 void insertData(char currentCh) {
-    waddch(sw[5], currentCh);
+    if(currentCh != 127)
+        printChar(5, currentCh);
     if ((strcmp(outputDir, "left") == 0) && (leftSd != -1)) {
-        waddch(sw[3], currentCh);
+        printChar(3, currentCh);
         send(leftSd, & currentCh, 1, 0);
-        updateWin(3);
     } else if ((strcmp(outputDir, "right") == 0) && (rightSd != -1)) {
-            waddch(sw[1], currentCh);
-            send(rightSd, & currentCh, 1, 0);
-            updateWin(1);
+        printChar(1, currentCh);
+        send(rightSd, & currentCh, 1, 0);
     }
-    updateWin(5);
 }
 
+//splits a string into array by space and returns given index
 char* split(char cmd[], int index) {
-    wprintw(sw[3], "||Split cmd = %s i = %d||", cmd, index);
-    updateWin(3);
     int i = 0;
     char *p = strtok (cmd, " ");
     char *array[100];
@@ -364,6 +413,7 @@ char* split(char cmd[], int index) {
     return array[index];
 }
 
+//reads a file and inserts it 
 void readInsertFile(char* fileName) {
     FILE *fp = fopen(fileName, "r");
     int c;
@@ -378,6 +428,7 @@ void readInsertFile(char* fileName) {
     updateWin(5);
 }
 
+//reads a file and proccesses cmds
 void readCmdFile(char filename[]) {
     FILE * fp;
     char cmd[1000];
@@ -482,16 +533,10 @@ void proccessCmd(char cmd[]) {
             strcpy(cmdTemp,cmd);
             char* addr = split(cmd, 1);
             char* port = split(cmdTemp, 2);
-            wprintw(sw[2], "||Connect right addr = %s port = %s||", addr, port);
-            updateWin(2);
             if(addr != NULL) {
                 if(port != NULL) {
-                    waddstr(sw[2], "||Port is not null||");
-                    updateWin(2);
                     rightSd = clientSocket(atoi(port),bindRight,addr); //maybe make addr raddr
                 } else {
-                    waddstr(sw[2], "||Port is null||");
-                    updateWin(2);
                     rightSd = clientSocket(rport,bindRight,addr);
                 }
                 if(rightSd > 0) {
@@ -596,9 +641,11 @@ void proccessCmd(char cmd[]) {
     } else if (strcmp(cmd, "drpr") == 0) {
         if(rightPassive > 0) {
             closesocket(rightPassive);
-            closesocket(rightSd);
             FD_CLR(rightPassive, & rfds);
-            FD_CLR(rightSd, & rfds);
+            if(rightSd > 0) {
+                closesocket(rightSd);
+                FD_CLR(rightSd, & rfds);
+            }
             rightPassive = -1;
             rightSd = -1;
             if (prsr) {
@@ -643,7 +690,7 @@ void proccessCmd(char cmd[]) {
             waddstr(sw[6], "\r\nError: Left connection doesn't exist");
             updateWin(6); 
         }
-        //show connection STDIN_FILENO
+    //show connection
     } else if (strcmp(cmd, "rght") == 0) {
         if(rightPassive > 0)
             wprintw(sw[4], "%s:%s ",localInfo(rightPassive,false),socketInfo(rightSd));
@@ -689,21 +736,32 @@ void proccessCmd(char cmd[]) {
 void readInput(int currentCh) {
     bool modeChange = false;
     int x, y;
-    getyx(sw[4], y, x);
 
     //backspace
     if (currentCh == 127 || currentCh == 263) {
         if (!(x == 0)) {
-            wmove(sw[4], y, x - 1);
-            wdelch(sw[4]);
+            if(insertMode) {
+                getyx(sw[5], y, x);
+                wmove(sw[5], y, x - 1);
+                wdelch(sw[5]);
+                updateWin(5);
+            } else {
+                getyx(sw[4], y, x);
+                wmove(sw[4], y, x - 1);
+                wdelch(sw[4]);
+                updateWin(4);
+            }
             cmd[cmdLen] = '\0';
             if (cmdLen > 0)
                 cmdLen--;
         }
+        //IF = 263
+        currentCh == 127;
     }
 
     //deals esc commands cause I could'nt find a better way
     if (!insertMode && currentCh == 27) {
+        getyx(sw[4], y, x);
         currentCh = wgetch(sw[4]);
         if (currentCh == '[') {
             currentCh = wgetch(sw[4]);
@@ -736,51 +794,51 @@ void readInput(int currentCh) {
                     cmdLen = strlen(cmd);
                     waddstr(sw[4], cmd);
                 }
-
             }
             updateWin(4);
-            currentCh = 127;
+            currentCh = 256;
         }
     }
 
     //prints slash without any meta        
     if (currentCh == '\\' && prevCh != '\\') {
         if (insertMode) {
-            waddch(sw[5], currentCh);
-            updateWin(5);
+            printChar(5, currentCh);
         } else {
-            waddch(sw[4], currentCh);
-            updateWin(4);
+            printChar(4, currentCh);
         }
-        //ignores some things
-    } else if (currentCh == 127 || currentCh > 255 || currentCh == 126) {
-        //exits insert mode
+    //ignores some things
+    } else if (currentCh > 255) {
+    //exits insert mode
     } else if (insertMode) {
         if (currentCh == 27 && prevCh != '\\') {
             modeChange = true;
             insertMode = false;
-            cmd[0] = '\0';
-            cmdLen = 0;
             viewPrevCmd = 0;
-            wmove(sw[4], 0, 0);
+            wmove(sw[4], 0, cmdLen);
             updateWin(4);
         } else {
             insertData(currentCh);
         }
-        // command mode
+    // command mode
     } else {
         //enters insert mode
         if (currentCh == 'i' && prevCh != '\\') {
             modeChange = true;
             insertMode = true;
-            werase(sw[5]); // said okay in assignment page
-            wmove(sw[5], 0, 0);
+            if(inputFull) {
+                werase(sw[5]);
+                inputFull = false;
+            }
+            getyx(sw[5], y, x);
+            wmove(sw[5], y, x);
+            if(x != 0 && y != 0)
+                waddstr(sw[5],"\n");
             updateWin(5);
-            //proccess word/command on enter
+        //proccess word/command on enter
         } else if (currentCh == 10) {
             //prints enter
-            waddch(sw[4], currentCh);
-            updateWin(4);
+            printChar(4, currentCh);
             viewPrevCmd = 0;
             //proccess cmd
             cmd[cmdLen] = '\0';
@@ -799,15 +857,16 @@ void readInput(int currentCh) {
             cmd[0] = '\0';
             cmdLen = 0;
 
-            //adds char to current command
+        //adds char to current command
         } else {
             if (cmdFull) {
                 werase(sw[4]);
                 updateWin(4);
                 cmdFull = false;
             }
-            waddch(sw[4], currentCh);
-            updateWin(4);
+            if(currentCh != 127) {
+                printChar(4, currentCh);
+            }
             cmd[cmdLen] = currentCh;
             cmdLen++;
         }
@@ -817,6 +876,11 @@ void readInput(int currentCh) {
         prevCh = currentCh;
     else
         prevCh = '\0';
+    //Moves cursor to correct location    
+    if(insertMode)
+        updateWin(5);
+    else
+        updateWin(4);
 }
 
 //Finds max of 2 given values and returns
@@ -824,6 +888,7 @@ int max(int x, int y) {
     return (x > y) ? x : y;
 }
 
+//accepts a connection
 int acceptConnection(int passiveSd, char* ip, int port) {
     char addrStr[INET_ADDRSTRLEN];
     char strAddr[INET_ADDRSTRLEN];
@@ -951,17 +1016,14 @@ void createConnection() {
                         }
                     }
                 } else {
-                    waddch(sw[2], buf[0]);
-                    updateWin(2);
+                    printChar(2, buf[0]);
                     if (lpl) {
                         send(rightSd, buf, n, 0);
-                        waddch(sw[1], buf[0]);
-                        updateWin(1);
+                        printChar(1, buf[0]);
                     }
                     if(leftSd > 0) {
                         send(leftSd, buf, n, 0);
-                        waddch(sw[3], buf[0]);
-                        updateWin(3);
+                        printChar(3, buf[0]);
                     }
                 }
             //leftSd
@@ -988,17 +1050,14 @@ void createConnection() {
                         }
                     }
                 } else {
-                    waddch(sw[0], buf[0]);
-                    updateWin(0);
+                    printChar(0, buf[0]);
                     if (lpr) {
                         send(leftSd, buf, n, 0);
-                        waddch(sw[3], buf[0]);
-                        updateWin(3);
+                        printChar(3, buf[0]);
                     }
                     if(rightSd > 0) {
                         send(rightSd, buf, n, 0);
-                        waddch(sw[1], buf[0]);
-                        updateWin(1);
+                        printChar(1, buf[0]);
                     }
                 }
             }
@@ -1011,9 +1070,10 @@ void createConnection() {
     closesocket(rightSd);
     nocbreak();
     endwin();
-    //exit(0); temp
+    exit(0);
 }
 
+//main
 int main(int argc, char * argv[]) {
     static struct option args[] = {
         {
@@ -1182,5 +1242,6 @@ int main(int argc, char * argv[]) {
     strcpy(laddr, "localhost");
     createConnection();
 }
+
 
 
