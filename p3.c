@@ -241,6 +241,9 @@ void bindSocket(int socket, int port) {
 }
 // Makes and returns socket for client (which sends information) from given port and host
 int clientSocket(int port, int bindingPort, char * host) {
+    wprintw(sw[2], "||clientSocket addr = %s port = %d||", host, port);
+    updateWin(2);
+            
     int sd; /* socket descriptor */
     struct hostent * ptrh; /* pointer to a host table entry */
     struct protoent * ptrp; /* pointer to a protocol table entry */
@@ -268,6 +271,8 @@ int clientSocket(int port, int bindingPort, char * host) {
     }
     
     if(bindingPort > 0) {
+        wprintw(sw[2], "||Entering bindingPort||");
+        updateWin(2);
         bindSocket(sd, bindingPort);
     }
     /* Connect the socket to the specified server. */
@@ -276,13 +281,12 @@ int clientSocket(int port, int bindingPort, char * host) {
             if (!prsr) {
                 wprintw(sw[6], "\r\nError: Failed to make connection to %s:%d", host, port);
                 updateWin(6);
+                return -1;
             }
         } else {
             break;
         }
     }
-    wprintw(sw[0],"||%d||",sd);
-    updateWin(0);
     return sd;
 }
 
@@ -342,6 +346,8 @@ void insertData(char currentCh) {
 }
 
 char* split(char cmd[], int index) {
+    wprintw(sw[3], "||Split cmd = %s i = %d||", cmd, index);
+    updateWin(3);
     int i = 0;
     char *p = strtok (cmd, " ");
     char *array[100];
@@ -354,7 +360,7 @@ char* split(char cmd[], int index) {
     }
     if(index >= i) {
         return NULL;
-    } 
+    }
     return array[index];
 }
 
@@ -430,9 +436,9 @@ void proccessCmd(char cmd[]) {
             bindLeft = lport;
         }
         if(leftPassive > 0) {
-            bindSocket(leftPassive,bindLeft);
+            bindSocket(leftPassive, bindLeft);
         } else if (leftSd > 0) {
-            bindSocket(leftSd,bindLeft);
+            bindSocket(leftSd, bindLeft);
         }
     } else if (strstr(cmd, "rlport")) { //,-- Not working?
         char* port = split(cmd, 1);
@@ -457,8 +463,11 @@ void proccessCmd(char cmd[]) {
                 } else {
                     leftSd = clientSocket(rport,bindLeft,addr);
                 }
-                if(leftSd > 0)
+                if(leftSd > 0) {
                     FD_SET(leftSd, &rfds);
+                } else {
+                    closesocket(leftSd);
+                }
             } else {
                 waddstr(sw[6], "\r\nError: connectl requires a IP Address");
                 updateWin(6); 
@@ -467,18 +476,29 @@ void proccessCmd(char cmd[]) {
             waddstr(sw[6], "\r\nError: Left socket already exists, drop and try again");
             updateWin(6);
         }
-    } else if (strstr(cmd, "connectr")) { //currently connect breaks program TEMP
+    } else if (strstr(cmd, "connectr")) { //currently connect breaks -- getting more then one command is doing this I think
         if(rightPassive <= 0 && rightSd <= 0) {
+            char* cmdTemp = malloc(100);
+            strcpy(cmdTemp,cmd);
             char* addr = split(cmd, 1);
-            char* port = split(cmd, 2);
+            char* port = split(cmdTemp, 2);
+            wprintw(sw[2], "||Connect right addr = %s port = %s||", addr, port);
+            updateWin(2);
             if(addr != NULL) {
                 if(port != NULL) {
+                    waddstr(sw[2], "||Port is not null||");
+                    updateWin(2);
                     rightSd = clientSocket(atoi(port),bindRight,addr); //maybe make addr raddr
                 } else {
+                    waddstr(sw[2], "||Port is null||");
+                    updateWin(2);
                     rightSd = clientSocket(rport,bindRight,addr);
                 }
-                if(rightSd > 0)
+                if(rightSd > 0) {
                     FD_SET(rightSd, &rfds);
+                } else {
+                    closesocket(rightSd);
+                }
             } else {
                 waddstr(sw[6], "\r\nError: connectr requires a IP Address");
                 updateWin(6);
@@ -498,6 +518,8 @@ void proccessCmd(char cmd[]) {
             }
             if(leftPassive > 0)
                 FD_SET(leftPassive, &rfds);
+            else
+                closesocket(leftPassive);
         } else {
             waddstr(sw[6], "\r\nError: Left socket already exists, drop and try again");
             updateWin(6);
@@ -512,6 +534,8 @@ void proccessCmd(char cmd[]) {
             }
             if(rightPassive > 0)
                 FD_SET(rightPassive, &rfds);
+            else
+                closesocket(rightPassive);
         } else {
             waddstr(sw[6], "\r\nError: Right socket already exists, drop and try again");
             updateWin(6);
@@ -863,12 +887,15 @@ void createConnection() {
         rightSd = clientSocket(rport, bindRight, raddr);
         if(rightSd > 0)
             FD_SET(rightSd, &rfds);
-        //sleep(50000);
+        else
+            closesocket(rightSd);
     }
     if((strcmp(type,"tail") == 0 ) || (strcmp(type,"middle") == 0 )) {
         leftPassive = serverSocket(lport, bindLeft);
         if(leftPassive > 0)
             FD_SET(leftPassive, &rfds);
+        else
+            closesocket(leftPassive);
     }
     
     //runs src if there are no passive connections
@@ -1153,4 +1180,3 @@ int main(int argc, char * argv[]) {
     strcpy(laddr, "localhost");
     createConnection();
 }
-
