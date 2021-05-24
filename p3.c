@@ -620,9 +620,11 @@ void proccessCmd(char cmd[]) {
     } else if (strcmp(cmd, "drpl") == 0) {
         if(leftPassive > 0) {
             closesocket(leftPassive);
-            closesocket(leftSd);
             FD_CLR(leftPassive, & rfds);
-            FD_CLR(leftSd, & rfds);
+            if(leftSd > 0) {
+                closesocket(leftSd);
+                FD_CLR(leftSd, & rfds);
+            }
             leftPassive = -1;
             leftSd = -1;
             if (prsl) {
@@ -1180,3 +1182,5 @@ int main(int argc, char * argv[]) {
     strcpy(laddr, "localhost");
     createConnection();
 }
+
+
