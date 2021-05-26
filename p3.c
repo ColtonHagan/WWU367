@@ -36,6 +36,7 @@ Program : Piggy3 program, networking program matching assignment description
 //functions
 void proccessCmd(char cmd[]);
 void readCmdFile(char filename[]);
+void parseArgs(int argc, char * argv[]);
 
 //ncurses
 WINDOW * w[NUMWINS];
@@ -60,6 +61,8 @@ char displayDir[10]; //Direction of display
 char src[100]; //SRC file
 bool lpl, lpr; //loopers
 bool prsl, prsr; //persistant
+int ogArgc;
+char** ogArgv;
 
 //Socket info
 int leftPassive, rightPassive, leftSd, rightSd = -1; //left/right sd, -1 if doesn't exist
@@ -462,6 +465,14 @@ void proccessCmd(char cmd[]) {
         endwin();
         exit(0);
         //src
+    } else if (strcmp(cmd, "reset") == 0) {
+        closesocket(rightSd);
+        closesocket(leftSd);
+        closesocket(leftPassive);
+        closesocket(rightPassive);
+        nocbreak();
+        endwin();
+        parseArgs(ogArgc,ogArgv);
     } else if (strcmp(cmd, "src") == 0) {
         readCmdFile("scriptin");
     } else if (strstr(cmd, "src")) {
@@ -493,7 +504,7 @@ void proccessCmd(char cmd[]) {
         } else if (leftSd > 0) {
             bindSocket(leftSd, bindLeft);
         }
-    } else if (strstr(cmd, "rlport")) { //,-- Not working?
+    } else if (strstr(cmd, "rlport")) {
         char* port = split(cmd, 1);
         if(port != NULL) {
             bindRight = atoi(port);
@@ -965,13 +976,15 @@ void createConnection() {
     FD_ZERO(&rfds);
     
     if((strcmp(type,"head") == 0 ) || (strcmp(type,"middle") == 0 )) {
-        rightSd = clientSocket(rport, bindRight, raddr,prsr);
+        rightSd = clientSocket(rport, bindRight, raddr, prsr);
         FD_SET(rightSd, &rfds);
     }
     if((strcmp(type,"tail") == 0 ) || (strcmp(type,"middle") == 0 )) {
         leftPassive = serverSocket(lport, bindLeft);
         FD_SET(leftPassive, &rfds);
     }
+    
+    updateWin(4);
     
     //runs src if there are no passive connections
     if (src[0] != '\0' && leftPassive <= 0 && rightPassive <= 0) {
@@ -1085,9 +1098,8 @@ void createConnection() {
     exit(0);
 }
 
-//main
-int main(int argc, char * argv[]) {
-    static struct option args[] = {
+void parseArgs(int argc, char * argv[]) {
+        static struct option args[] = {
         {
             "head",
             no_argument,
@@ -1253,4 +1265,17 @@ int main(int argc, char * argv[]) {
     bindLeft = lport;
     strcpy(laddr, "localhost");
     createConnection();
+}
+
+//main
+int main(int argc, char **argv) {
+    int ogArgc = argc;
+    ogArgv = malloc((argc+1) * sizeof(*ogArgv));
+    for(int i = 0; i < argc; i++) {
+        ogArgv[i] = malloc(strlen(argv[i])+1);
+        strcpy(ogArgv[i], argv[i]);
+    }
+    ogArgv[argc] = NULL;
+    parseArgs(ogArgc,ogArgv);
+    return 0;
 }
