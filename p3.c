@@ -727,7 +727,7 @@ void proccessCmd(char cmd[]) {
     } else if (strcmp(cmd, "prsl") == 0) {
         prsl = true;
     } else {
-        waddstr(sw[6], "\r\nError: Command not recognised");
+        wprintw(sw[6], "\r\nError: Command %s not recognised", cmd);
         updateWin(6);
     }
     updateWin(6);
@@ -751,9 +751,9 @@ void readInput(int currentCh) {
                 getyx(sw[4], y, x);
                 wmove(sw[4], y, x - 1);
                 wdelch(sw[4]);
-                cmd[cmdLen] = '\0';
                 if (cmdLen > 0)
                     cmdLen--;
+                memmove(&cmd[x-1], &cmd[x], strlen(cmd) - (x-1));
                 updateWin(4);
             }
         }
@@ -773,9 +773,10 @@ void readInput(int currentCh) {
                     wmove(sw[4], y, x - 1);
             //del
             } else if (currentCh == 51) {
+                if (cmdLen > 0)
+                    cmdLen--;
+                memmove(&cmd[x], &cmd[x+1], strlen(cmd) - x);
                 currentCh = wgetch(sw[4]);
-                waddstr(sw[1],"Deleting");
-                updateWin(1);
                 wdelch(sw[4]);
             //home
             } else if (currentCh == 72) {
@@ -869,11 +870,11 @@ void readInput(int currentCh) {
                 updateWin(4);
                 cmdFull = false;
             }
-            if(currentCh != 127) {
-                printChar(4, currentCh);
-            }
-            cmd[cmdLen] = currentCh;
-            cmdLen++;
+            printChar(4, currentCh);
+            getyx(sw[4], y, x);
+            cmd[x-1] = currentCh;
+            if((x-1) == cmdLen)
+                cmdLen++;
         }
     }
     //update prevCH
@@ -881,9 +882,6 @@ void readInput(int currentCh) {
         prevCh = currentCh;
     else
         prevCh = '\0';
-    
-    wprintw(sw[0],"||cmdLen = %d||",cmdLen); //temp
-    updateWin(0);
     
     //Moves cursor to correct location    
     if(insertMode)
