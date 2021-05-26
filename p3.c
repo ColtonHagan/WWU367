@@ -378,6 +378,8 @@ int serverSocket(int port, int bindingPort) {
     if (listen(sd, QLEN) < 0) {
         waddstr(sw[6], "Error: Listen failed\n");
         updateWin(6);
+    } else {
+        return -1;
     }
     return sd;
 }
@@ -386,10 +388,10 @@ int serverSocket(int port, int bindingPort) {
 void insertData(char currentCh) {
     if(currentCh != 127)
         printChar(5, currentCh);
-    if ((strcmp(outputDir, "left") == 0) && (leftSd != -1)) {
+    if ((strcmp(outputDir, "left") == 0) && (leftSd > 0)) {
         printChar(3, currentCh);
         send(leftSd, & currentCh, 1, 0);
-    } else if ((strcmp(outputDir, "right") == 0) && (rightSd != -1)) {
+    } else if ((strcmp(outputDir, "right") == 0) && (rightSd > 0)) {
         printChar(1, currentCh);
         send(rightSd, & currentCh, 1, 0);
     }
@@ -612,13 +614,13 @@ void proccessCmd(char cmd[]) {
         }
     //output cmds
     } else if (strcmp(cmd, "outl") == 0) {
-        if (strcmp(type, "tail") == 0 || strcmp(type, "middle") == 0)
+        if (leftPassive > 0 || leftSd > 0)
             strcpy(outputDir, "left");
         else
             waddstr(sw[6], "\r\nError: Can't change output direction to left, connection is head");
         updateWin(6);
     } else if (strcmp(cmd, "outr") == 0) {
-        if (strcmp(type, "head") == 0 || strcmp(type, "middle") == 0) {
+        if (rightPassive > 0 || rightSd > 0) {
             strcpy(outputDir, "right");
         } else {
             waddstr(sw[6], "\r\nError: Can't change output direction to right, connection is tail");
@@ -749,11 +751,11 @@ void readInput(int currentCh) {
                 getyx(sw[4], y, x);
                 wmove(sw[4], y, x - 1);
                 wdelch(sw[4]);
+                cmd[cmdLen] = '\0';
+                if (cmdLen > 0)
+                    cmdLen--;
                 updateWin(4);
             }
-            cmd[cmdLen] = '\0';
-            if (cmdLen > 0)
-                cmdLen--;
         }
         //IF = 263
         currentCh == 127;
@@ -769,16 +771,19 @@ void readInput(int currentCh) {
             if (currentCh == 68) {
                 if (x != 0)
                     wmove(sw[4], y, x - 1);
-                //del
+            //del
             } else if (currentCh == 51) {
+                currentCh = wgetch(sw[4]);
+                waddstr(sw[1],"Deleting");
+                updateWin(1);
                 wdelch(sw[4]);
-                //home
+            //home
             } else if (currentCh == 72) {
                 wmove(sw[4], y, 0);
-                //end    
+            //end    
             } else if (currentCh == 70) {
                 wmove(sw[4], y, cmdLen);
-                //up
+            //up
             } else if (currentCh == 65) {
                 werase(sw[4]);
                 cmd[cmdLen] = '\0';
@@ -796,7 +801,7 @@ void readInput(int currentCh) {
                 }
             }
             updateWin(4);
-            currentCh = 256;
+            currentCh = 300;
         }
     }
 
@@ -858,7 +863,7 @@ void readInput(int currentCh) {
             cmdLen = 0;
 
         //adds char to current command
-        } else {
+        } else if (currentCh != 127) {
             if (cmdFull) {
                 werase(sw[4]);
                 updateWin(4);
@@ -876,6 +881,10 @@ void readInput(int currentCh) {
         prevCh = currentCh;
     else
         prevCh = '\0';
+    
+    wprintw(sw[0],"||cmdLen = %d||",cmdLen); //temp
+    updateWin(0);
+    
     //Moves cursor to correct location    
     if(insertMode)
         updateWin(5);
@@ -1242,6 +1251,3 @@ int main(int argc, char * argv[]) {
     strcpy(laddr, "localhost");
     createConnection();
 }
-
-
-
