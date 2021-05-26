@@ -741,14 +741,16 @@ void readInput(int currentCh) {
 
     //backspace
     if (currentCh == 127 || currentCh == 263) {
+        if(insertMode)
+            getyx(sw[5], y, x);
+        else 
+            getyx(sw[4], y, x);
         if (!(x == 0)) {
             if(insertMode) {
-                getyx(sw[5], y, x);
                 wmove(sw[5], y, x - 1);
                 wdelch(sw[5]);
                 updateWin(5);
             } else {
-                getyx(sw[4], y, x);
                 wmove(sw[4], y, x - 1);
                 wdelch(sw[4]);
                 if (cmdLen > 0)
@@ -859,6 +861,7 @@ void readInput(int currentCh) {
             if (prevCmdNum < 10) {
                 prevCmdNum++;
             }
+            //clears cmd string
             proccessCmd(cmd);
             cmd[0] = '\0';
             cmdLen = 0;
