@@ -295,8 +295,7 @@ void bindSocket(int socket, int port) {
     }
 }
 // Makes and returns socket for client (which sends information) from given port and host
-int clientSocket(int port, int bindingPort, char * host) {
-            
+int clientSocket(int port, int bindingPort, char * host, bool persist) {
     int sd; /* socket descriptor */
     struct hostent * ptrh; /* pointer to a host table entry */
     struct protoent * ptrp; /* pointer to a protocol table entry */
@@ -309,27 +308,30 @@ int clientSocket(int port, int bindingPort, char * host) {
     if (((char * ) ptrh) == NULL) {
         wprintw(sw[4], "\r\nError: invalid host: %s", host);
         updateWin(6);
+        return -1;
     }
     memcpy(&sad.sin_addr, ptrh -> h_addr, ptrh -> h_length);
     /* Map TCP transport protocol name to protocol number. */
     if (((long int)(ptrp = getprotobyname("tcp"))) == 0) {
         waddstr(sw[6], "\r\nError: Cannot map \"tcp\" to protocol number");
         updateWin(6);
+        return -1;
     }
     /* Create a socket. */
     sd = socket(PF_INET, SOCK_STREAM, ptrp -> p_proto);
     if (sd < 0) {
         waddstr(sw[6], "\r\nError: Socket creation failed");
         updateWin(6);
+        return -1;
     }
     
     if(bindingPort > 0) {
         bindSocket(sd, bindingPort);
     }
     /* Connect the socket to the specified server. */
-    while (1) {
+    while(1) {
         if (connect(sd, (struct sockaddr * ) & sad, sizeof(sad)) < 0) {
-            if (!prsr) {
+            if(!persist) {
                 wprintw(sw[6], "\r\nError: Failed to make connection to %s:%d", host, port);
                 updateWin(6);
                 return -1;
@@ -378,8 +380,6 @@ int serverSocket(int port, int bindingPort) {
     if (listen(sd, QLEN) < 0) {
         waddstr(sw[6], "Error: Listen failed\n");
         updateWin(6);
-    } else {
-        return -1;
     }
     return sd;
 }
@@ -389,7 +389,7 @@ void insertData(char currentCh) {
     if(currentCh != 127)
         printChar(5, currentCh);
     if ((strcmp(outputDir, "left") == 0) && (leftSd > 0)) {
-        printChar(3, currentCh);
+        printChar(2, currentCh);
         send(leftSd, & currentCh, 1, 0);
     } else if ((strcmp(outputDir, "right") == 0) && (rightSd > 0)) {
         printChar(1, currentCh);
@@ -443,12 +443,12 @@ void readCmdFile(char filename[]) {
             int len = strlen(cmd);
             if (len > 0 && cmd[len - 1] == '\n')
                 cmd[len - 1] = 0;
-            wprintw(sw[5], "\r%s\r\n", cmd);
+            wprintw(sw[4], "\r%s\r\n", cmd);
             proccessCmd(cmd);
-            updateWin(5);
+            updateWin(4);
         }
     }
-    updateWin(5);
+    updateWin(4);
 }
 
 //uses given command
@@ -512,9 +512,9 @@ void proccessCmd(char cmd[]) {
             char* port = split(cmd, 2);
             if(addr != NULL) {
                 if(port != NULL) {
-                    leftSd = clientSocket(atoi(port),bindLeft,addr); //maybe make ddr raddr
+                    leftSd = clientSocket(atoi(port),bindLeft,addr,prsl); //maybe make ddr raddr
                 } else {
-                    leftSd = clientSocket(rport,bindLeft,addr);
+                    leftSd = clientSocket(rport,bindLeft,addr,prsl);
                 }
                 if(leftSd > 0) {
                     FD_SET(leftSd, &rfds);
@@ -537,9 +537,9 @@ void proccessCmd(char cmd[]) {
             char* port = split(cmdTemp, 2);
             if(addr != NULL) {
                 if(port != NULL) {
-                    rightSd = clientSocket(atoi(port),bindRight,addr); //maybe make addr raddr
+                    rightSd = clientSocket(atoi(port),bindRight,addr,prsr); //maybe make addr raddr
                 } else {
-                    rightSd = clientSocket(rport,bindRight,addr);
+                    rightSd = clientSocket(rport,bindRight,addr,prsr);
                 }
                 if(rightSd > 0) {
                     FD_SET(rightSd, &rfds);
@@ -651,7 +651,8 @@ void proccessCmd(char cmd[]) {
             rightPassive = -1;
             rightSd = -1;
             if (prsr) {
-                rightPassive = serverSocket(rport, bindRight);
+                while(rightPassive <= 0)
+                    rightPassive = serverSocket(rport, bindRight);
                 FD_SET(rightPassive, &rfds);
             }
         } else if (rightSd > 0) {
@@ -659,7 +660,8 @@ void proccessCmd(char cmd[]) {
             FD_CLR(rightSd, & rfds);
             rightSd = -1;
             if (prsr) {
-                rightSd = clientSocket(rport, bindRight, raddr);
+                while(rightSd <= 0)
+                    rightSd = clientSocket(rport, bindRight, raddr,prsr);
                 FD_SET(rightSd, & rfds);
             }
         } else {
@@ -677,7 +679,8 @@ void proccessCmd(char cmd[]) {
             leftPassive = -1;
             leftSd = -1;
             if (prsl) {
-                leftPassive = serverSocket(lport, bindLeft);
+                while(leftPassive <= 0)
+                    leftPassive = serverSocket(lport, bindLeft);
                 FD_SET(leftPassive, &rfds);
             }
         } else if (leftSd > 0) {
@@ -685,7 +688,8 @@ void proccessCmd(char cmd[]) {
             FD_CLR(leftSd, & rfds);
             leftSd = -1;
             if (prsl) {
-                leftSd = clientSocket(lport, bindLeft, laddr);
+                while(leftSd <= 0)
+                    leftSd = clientSocket(lport, bindLeft, laddr,prsl);
                 FD_SET(leftSd, &rfds);
             }
         } else {
@@ -834,14 +838,14 @@ void readInput(int currentCh) {
         if (currentCh == 'i' && prevCh != '\\') {
             modeChange = true;
             insertMode = true;
+            getyx(sw[5], y, x);
+            wmove(sw[5], y, x);
             if(inputFull) {
                 werase(sw[5]);
                 inputFull = false;
-            }
-            getyx(sw[5], y, x);
-            wmove(sw[5], y, x);
-            if(x != 0 && y != 0)
+            } else {
                 waddstr(sw[5],"\n");
+            }
             updateWin(5);
         //proccess word/command on enter
         } else if (currentCh == 10) {
@@ -961,24 +965,18 @@ void createConnection() {
     FD_ZERO(&rfds);
     
     if((strcmp(type,"head") == 0 ) || (strcmp(type,"middle") == 0 )) {
-        rightSd = clientSocket(rport, bindRight, raddr);
-        if(rightSd > 0)
-            FD_SET(rightSd, &rfds);
-        else
-            closesocket(rightSd);
+        rightSd = clientSocket(rport, bindRight, raddr,prsr);
+        FD_SET(rightSd, &rfds);
     }
     if((strcmp(type,"tail") == 0 ) || (strcmp(type,"middle") == 0 )) {
         leftPassive = serverSocket(lport, bindLeft);
-        if(leftPassive > 0)
-            FD_SET(leftPassive, &rfds);
-        else
-            closesocket(leftPassive);
+        FD_SET(leftPassive, &rfds);
     }
     
     //runs src if there are no passive connections
-    /*if (src[0] != '\0' && leftPassive <= 0 && rightPassive <= 0) {
+    if (src[0] != '\0' && leftPassive <= 0 && rightPassive <= 0) {
         readCmdFile(src);
-    }*/
+    }
     /* accept and handle requests */
     while (1) {
         FD_SET(STDIN_FILENO, & rfds);
@@ -993,17 +991,17 @@ void createConnection() {
             } else if (FD_ISSET(STDIN_FILENO, & loopRfds)) {
                 readInput(wgetch(sw[4]));
             //rightPassive
-            } else if(rightPassive > -1 && FD_ISSET(rightPassive, & loopRfds)) {
-                rightSd = acceptConnection(rightPassive,raddr,-1); // temp?? No current way to set
+            } else if(/*rightPassive > -1 &&*/ FD_ISSET(rightPassive, & loopRfds)) {
+                rightSd = acceptConnection(rightPassive,raddr,-1);
                 if(rightSd > 0)
                     FD_SET(rightSd, & rfds);
             //leftPassive
-            } else if (leftPassive > -1 && FD_ISSET(leftPassive, & loopRfds)) {
+            } else if (/*leftPassive > -1 &&*/ FD_ISSET(leftPassive, & loopRfds)) {
                 leftSd = acceptConnection(leftPassive,laddr,lrport);
                 if(leftSd > 0)
                     FD_SET(leftSd, & rfds);
             //rightSd
-            } else if (rightSd > -1 && FD_ISSET(rightSd, & loopRfds)) {
+            } else if (/*rightSd > -1 &&*/ FD_ISSET(rightSd, & loopRfds)) {
                 if ((n = recv(rightSd, buf, sizeof(buf), 0)) == 0) {
                     if(rightPassive > 0) {
                         closesocket(rightPassive);
@@ -1013,7 +1011,8 @@ void createConnection() {
                         rightPassive = -1;
                         rightSd = -1;
                         if (prsr) {
-                            rightPassive = serverSocket(rport, bindRight);
+                            while(rightPassive <= 0)
+                                rightPassive = serverSocket(rport, bindRight);
                             FD_SET(rightPassive, &rfds);
                         }
                     } else if (rightSd > 0) {
@@ -1021,23 +1020,24 @@ void createConnection() {
                         FD_CLR(rightSd, & rfds);
                         rightSd = -1;
                         if (prsr) {
-                            rightSd = clientSocket(rport, bindRight, raddr);
+                            while(rightSd <= 0)
+                                rightSd = clientSocket(rport, bindRight, raddr,prsr);
                             FD_SET(rightSd, & rfds);
                         }
                     }
                 } else {
-                    printChar(2, buf[0]);
-                    if (lpl) {
+                    printChar(3, buf[0]);
+                    if (lpl && rightSd > 0) {
                         send(rightSd, buf, n, 0);
                         printChar(1, buf[0]);
                     }
                     if(leftSd > 0) {
                         send(leftSd, buf, n, 0);
-                        printChar(3, buf[0]);
+                        printChar(2, buf[0]);
                     }
                 }
             //leftSd
-            } else if (leftSd > -1 && FD_ISSET(leftSd, & loopRfds)) {
+            } else if (/*leftSd > -1 &&*/ FD_ISSET(leftSd, & loopRfds)) {
                 if ((n = recv(leftSd, buf, sizeof(buf), 0)) == 0) {
                     if(leftPassive > 0) {
                         closesocket(leftPassive);
@@ -1046,8 +1046,9 @@ void createConnection() {
                         FD_CLR(leftSd, & rfds);
                         leftPassive = -1;
                         leftSd = -1;
-                        if (prsr) {
-                            leftPassive = serverSocket(lport, bindLeft);
+                        if (prsl) {
+                            while(leftPassive <= 0)
+                                leftPassive = serverSocket(lport, bindLeft);
                             FD_SET(leftPassive, &rfds);
                         }
                     } else if (leftSd > 0) {
@@ -1055,15 +1056,16 @@ void createConnection() {
                         FD_CLR(leftSd, & rfds);
                         leftSd = -1;
                         if (prsl) {
-                            leftSd = clientSocket(lport, bindLeft, laddr);
+                            while(leftSd <= 0)
+                                leftSd = clientSocket(lport, bindLeft, laddr,prsl);
                             FD_SET(leftSd, &rfds);
                         }
                     }
                 } else {
                     printChar(0, buf[0]);
-                    if (lpr) {
+                    if (lpr && leftSd > 0) {
                         send(leftSd, buf, n, 0);
-                        printChar(3, buf[0]);
+                        printChar(2, buf[0]);
                     }
                     if(rightSd > 0) {
                         send(rightSd, buf, n, 0);
