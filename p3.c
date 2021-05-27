@@ -27,6 +27,7 @@ Program : Piggy3 program, networking program matching assignment description
 #include <sys/types.h>
 #include <ctype.h>
 #include <string.h>
+#include <time.h>
 
 #define PROTOPORT 36711 /* default port number */
 #define QLEN 6 /* size of request queue */
@@ -157,7 +158,11 @@ char *localInfo(int socket, bool left) {
         } else {
             snprintf(portString, 100, "%d", bindRight);
         }
-        strcat(localInfoOut,portString);
+        
+        if(atoi(portString) > 0)
+            strcat(localInfoOut,portString);
+        else
+            strcat(localInfoOut,"*");
     }
     
     return localInfoOut;
@@ -377,6 +382,7 @@ int serverSocket(int port, int bindingPort) {
         bindSocket(sd,bindingPort);
     } else {
         bindSocket(sd,port);
+        bindLeft = port;
     }
     
     /* Specify size of request queue */
@@ -398,7 +404,11 @@ void insertData(char currentCh) {
         printChar(1, currentCh);
         send(rightSd, &currentCh, 1, 0);
     }
-    //sleep(1); // very very temp but works
+    //waits since send can be slow sometimes
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = 100000;
+    nanosleep(&ts, NULL);
 }
 
 //splits a string into array by space and returns given index
@@ -1268,14 +1278,13 @@ void parseArgs(int argc, char * argv[]) {
     if (raddr[0] == '\0') {
         strcpy(raddr, "localhost");
     }
-    
-    bindLeft = lport;
     strcpy(laddr, "localhost");
     createConnection();
 }
 
 //main
 int main(int argc, char **argv) {
+    //Saves given arguments for reset
     int ogArgc = argc;
     char** ogArgv = malloc((argc+1) * sizeof(*ogArgv));
     for(int i = 0; i < argc; i++) {
@@ -1283,6 +1292,7 @@ int main(int argc, char **argv) {
         strcpy(ogArgv[i], argv[i]);
     }
     ogArgv[argc] = NULL;
+    //parse args, and runs the program
     parseArgs(argc,argv);
     return 0;
 }
