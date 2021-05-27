@@ -1,6 +1,6 @@
 /*
 Name : Colton Hagan
-Date : 5/26/21
+Date : 5/23/21
 Class : CS367
 Program : Piggy3 program, networking program matching assignment description 
 */
@@ -393,11 +393,12 @@ void insertData(char currentCh) {
         printChar(5, currentCh);
     if ((strcmp(outputDir, "left") == 0) && (leftSd > 0)) {
         printChar(2, currentCh);
-        send(leftSd, & currentCh, 1, 0);
+        send(leftSd, &currentCh, 1, 0);
     } else if ((strcmp(outputDir, "right") == 0) && (rightSd > 0)) {
         printChar(1, currentCh);
-        send(rightSd, & currentCh, 1, 0);
+        send(rightSd, &currentCh, 1, 0);
     }
+    //sleep(1); // very very temp but works
 }
 
 //splits a string into array by space and returns given index
@@ -519,11 +520,13 @@ void proccessCmd(char cmd[]) {
     //connection
     } else if (strstr(cmd, "connectl")) {
         if(leftPassive <= 0 && leftSd <= 0) {
+            char* cmdTemp = malloc(100);
+            strcpy(cmdTemp,cmd);
             char* addr = split(cmd, 1);
-            char* port = split(cmd, 2);
+            char* port = split(cmdTemp, 2);
             if(addr != NULL) {
                 if(port != NULL) {
-                    leftSd = clientSocket(atoi(port),bindLeft,addr,prsl); //maybe make ddr raddr
+                    leftSd = clientSocket(atoi(port),bindLeft,addr,prsl);
                 } else {
                     leftSd = clientSocket(rport,bindLeft,addr,prsl);
                 }
@@ -788,6 +791,10 @@ void readInput(int currentCh) {
             if (currentCh == 68) {
                 if (x != 0)
                     wmove(sw[4], y, x - 1);
+            //move right
+            } else if (currentCh == 67) {
+                if (x < cmdLen)
+                    wmove(sw[4], y, x + 1);
             //del
             } else if (currentCh == 51) {
                 if (cmdLen > 0)
@@ -1270,12 +1277,12 @@ void parseArgs(int argc, char * argv[]) {
 //main
 int main(int argc, char **argv) {
     int ogArgc = argc;
-    ogArgv = malloc((argc+1) * sizeof(*ogArgv));
+    char** ogArgv = malloc((argc+1) * sizeof(*ogArgv));
     for(int i = 0; i < argc; i++) {
         ogArgv[i] = malloc(strlen(argv[i])+1);
         strcpy(ogArgv[i], argv[i]);
     }
     ogArgv[argc] = NULL;
-    parseArgs(ogArgc,ogArgv);
+    parseArgs(argc,argv);
     return 0;
 }
