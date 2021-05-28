@@ -1,6 +1,6 @@
 /*
 Name : Colton Hagan
-Date : 5/23/21
+Date : 5/28/21
 Class : CS367
 Program : Piggy3 program, networking program matching assignment description 
 */
@@ -50,8 +50,9 @@ bool zeroFull = true;
 bool oneFull = true;
 bool twoFull = true;
 bool threeFull = true;
+
 //for up
-char prevCmd[10][20];
+char prevCmd[10][100];
 int prevCmdNum = 0;
 int viewPrevCmd = 0;
 
@@ -269,6 +270,7 @@ void createWindows() {
         wrefresh(w[i]);
         wrefresh(sw[i]);
     }
+    //prints window messages
     wmove(sw[0],0,0);
     wprintw(sw[0],"Data arriving from the left");
     wmove(sw[1],0,0);
@@ -407,7 +409,7 @@ void insertData(char currentCh) {
     //waits since send can be slow sometimes
     struct timespec ts;
     ts.tv_sec = 0;
-    ts.tv_nsec = 100000;
+    ts.tv_nsec = 200000;
     nanosleep(&ts, NULL);
 }
 
@@ -688,10 +690,10 @@ void proccessCmd(char cmd[]) {
                     rightSd = clientSocket(rport, bindRight, raddr,prsr);
                 FD_SET(rightSd, & rfds);
             }
-        } else {
+        } /*else {
             waddstr(sw[6], "\r\nError: Right connection doesn't exist");
             updateWin(6); 
-        }
+        }*/
     } else if (strcmp(cmd, "drpl") == 0) {
         if(leftPassive > 0) {
             closesocket(leftPassive);
@@ -716,10 +718,10 @@ void proccessCmd(char cmd[]) {
                     leftSd = clientSocket(lport, bindLeft, laddr,prsl);
                 FD_SET(leftSd, &rfds);
             }
-        } else {
+        } /*else {
             waddstr(sw[6], "\r\nError: Left connection doesn't exist");
             updateWin(6); 
-        }
+        }*/
     //show connection
     } else if (strcmp(cmd, "rght") == 0) {
         if(rightPassive > 0)
@@ -778,7 +780,7 @@ char* append (char str[], char ch, int index) {
 }
 
 //reads input via insert/cmd adding given char to either
-void readInput(int currentCh) {
+void readInput(short currentCh) {
     bool modeChange = false;
     int x, y;
 
@@ -863,7 +865,7 @@ void readInput(int currentCh) {
             printChar(4, currentCh);
         }
     //ignores some things
-    } else if (currentCh > 255) {
+    } else if (currentCh > 255 || currentCh == 126) {
     //exits insert mode
     } else if (insertMode) {
         if (currentCh == 27 && prevCh != '\\') {
@@ -926,9 +928,7 @@ void readInput(int currentCh) {
                 cmdLen++;
                 printChar(4, currentCh);
             } else {
-                //temp
                 cmd[cmdLen] = '\0';
-                updateWin(0);
                 strcpy(cmd, append(cmd,currentCh,x));
                 cmdLen++;
                 
@@ -1143,6 +1143,7 @@ void createConnection() {
     exit(0);
 }
 
+//Parses args and starts everything
 void parseArgs(int argc, char * argv[]) {
         static struct option args[] = {
         {
@@ -1312,7 +1313,7 @@ void parseArgs(int argc, char * argv[]) {
 
 //main
 int main(int argc, char **argv) {
-    //Saves given arguments for reset
+    //Saves given arguments for reset command -- Not needed
     int ogArgc = argc;
     char** ogArgv = malloc((argc+1) * sizeof(*ogArgv));
     for(int i = 0; i < argc; i++) {
