@@ -762,6 +762,21 @@ void proccessCmd(char cmd[]) {
     updateWin(4);
 }
 
+//Original Written for 347
+//Appends a given char to given string at given index
+char* append (char str[], char ch, int index) {
+  int size = strlen(str)+1;
+  char* newString = malloc(size);
+  for(int i = 0; i < index; i++) {
+    newString[i] = str[i];
+  }
+  newString[index] = ch;
+  for(int i = (index+1); i < size; i++) {
+    newString[i] = str[i-1];
+  }
+  return newString;
+}
+
 //reads input via insert/cmd adding given char to either
 void readInput(int currentCh) {
     bool modeChange = false;
@@ -905,11 +920,24 @@ void readInput(int currentCh) {
                 updateWin(4);
                 cmdFull = false;
             }
-            printChar(4, currentCh);
             getyx(sw[4], y, x);
-            cmd[x-1] = currentCh;
-            if((x-1) == cmdLen)
+            if(x == cmdLen) {
+                cmd[x] = currentCh;
                 cmdLen++;
+                printChar(4, currentCh);
+            } else {
+                //temp
+                cmd[cmdLen] = '\0';
+                updateWin(0);
+                strcpy(cmd, append(cmd,currentCh,x));
+                cmdLen++;
+                
+                for(int i = 0; i < cmdLen; i++) {
+                    if(mvwinch(sw[4],y,i) != cmd[i])
+                        printChar(4, cmd[i]);
+                }
+                wmove(sw[4],y,x+1);
+            }
         }
     }
     //update prevCH
